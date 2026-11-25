@@ -6,9 +6,21 @@ android {
         applicationId 'com.baksimha.siddur'
         minSdk 26
         targetSdk 34
-        versionCode 5
-        versionName '1.4'
+        versionCode 6
+        versionName '1.5'
     }
-    buildTypes { release { minifyEnabled false } }
+    // One fixed signing key, so every new build installs as an update over the previous one
+    signingConfigs {
+        fixed {
+            storeFile file('siddur.keystore')
+            storePassword 'siddur123'
+            keyAlias 'siddur'
+            keyPassword 'siddur123'
+        }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.fixed }
+        release { minifyEnabled false; signingConfig signingConfigs.fixed }
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
