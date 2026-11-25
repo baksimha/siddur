@@ -47,7 +47,7 @@ const HEB_BOOK = {
   Joshua: 'יהושע', Judges: 'שופטים', 'I Samuel': 'שמואל א', 'II Samuel': 'שמואל ב', 'I Kings': 'מלכים א', 'II Kings': 'מלכים ב',
   Isaiah: 'ישעיהו', Jeremiah: 'ירמיהו', Ezekiel: 'יחזקאל', Hosea: 'הושע', Joel: 'יואל', Amos: 'עמוס', Obadiah: 'עובדיה',
   Jonah: 'יונה', Micah: 'מיכה', Nahum: 'נחום', Habakkuk: 'חבקוק', Zephaniah: 'צפניה', Haggai: 'חגי', Zechariah: 'זכריה',
-  Malachi: 'מלאכי', Psalms: 'תהילים', Esther: 'מגילת אסתר', Lamentations: 'איכה', Ruth: 'רות', Ecclesiastes: 'קהלת',
+  Malachi: 'מלאכי', Daniel: 'דניאל', Ezra: 'עזרא', Nehemiah: 'נחמיה', 'I Chronicles': 'דברי הימים א', 'II Chronicles': 'דברי הימים ב', Job: 'איוב', Proverbs: 'משלי', Psalms: 'תהילים', Esther: 'מגילת אסתר', Lamentations: 'איכה', Ruth: 'רות', Ecclesiastes: 'קהלת',
   'Song of Songs': 'שיר השירים',
 };
 const ICON = {
@@ -520,11 +520,118 @@ async function renderLearn() {
   const rows = S.learning.map((k) => {
     const name = (LEARN.find((x) => x[0] === k) || [k, k])[1];
     const v = learningLine(k, hd).replace(/^.*?:\s*/, '');
-    const href = k === 'dirshudafhalacha' ? '#mb' : k === 'psalms' ? '#tehillim-day' : '';
-    return `<${href ? `a href="${href}"` : 'div'} class="row" style="--c:#A855F7;--t:#FAF5FF"><span class="ri">${icon('book', 18)}</span><span class="rl">${name}</span><span class="rv">${esc(v)}</span></${href ? 'a' : 'div'}>`;
+    const href = k === 'dirshudafhalacha' ? '#mb' : k === 'psalms' ? '#tehillim-day' : '#l-' + k;
+    return `<a href="${href}" class="row" style="--c:#A855F7;--t:#FAF5FF"><span class="ri">${icon('book', 18)}</span><span class="rl">${name}</span><span class="rv">${esc(v)}</span></a>`;
   });
   page('לימוד יומי', `<section class="card"><h2>היום · ${hebDate(hd)}</h2>${rows.join('') || '<p class="empty">לא נבחר לימוד. בחר בהגדרות.</p>'}</section>
-    <p class="hint">את מסלולי הלימוד בוחרים בהגדרות. משנה ברורה ותהילים נפתחים עם הטקסט המלא.</p>`, { nav: 'learn' });
+    <p class="hint">את מסלולי הלימוד בוחרים בהגדרות. כל לימוד נפתח עם הטקסט המלא.</p>`, { nav: 'learn' });
+}
+
+const num = (x) => String(x).split(/[.:]/).map(Number);
+const segs = (arr) => (arr || []).filter((x) => typeof x === 'string' && x.trim()).map((x) => `<p class="tx">${x}</p>`).join('');
+function rangeParse(str) {
+  // "9.1-9.2" | "4-6" | "28:1" -> [[a,b],[c,d]]
+  const [a, b] = String(str).split('-');
+  const A = num(a);
+  let B = b && !/end|סוף/.test(b) ? num(b) : (b ? [A[0], 9999] : A);
+  if (B.length === 1 && A.length === 2) B = [A[0], B[0]];
+  return [A, B];
+}
+
+async function renderLearnItem(k) {
+  const name = (LEARN.find((x) => x[0] === k) || [k, k])[1];
+  page(name, '<p class="loading">טוען…</p>', { back: '#learn', nav: false, cls: 'reading' });
+  const hd = new HDate(NOW());
+  let ev;
+  try { ev = DailyLearning.lookup(k, hd, true); } catch (e) { ev = null; }
+  if (!ev) { $('main').innerHTML = '<p class="empty">אין לימוד היום במסלול הזה.</p>'; return; }
+  const idx = await load('learn_index');
+  let h = `<div class="banner">${esc(ev.render('he'))}</div>`;
+  const desc = ev.getDesc();
+  try {
+    if (k === 'dafyomi' || k === 'dirshuamudyomi') {
+      const nm = k === 'dafyomi' ? ev.daf.name : ev.amud.name;
+      const key = idx.bavli[nm];
+      if (!key) throw new Error('missing');
+      const t = await load(key);
+      if (key.startsWith('mishnah_')) {
+        h += t.map((ch, i) => `<h3 class="sh">פרק ${gematriya(i + 1)}</h3>${segs(ch)}`).join('');
+      } else {
+        const sides = k === 'dafyomi' ? [[ev.daf.blatt, 'a'], [ev.daf.blatt, 'b']] : [[ev.amud.amud, ev.amud.side]];
+        for (const [d, sd] of sides) {
+          const i = 2 * d - 2 + (sd === 'b' ? 1 : 0);
+          h += `<h3 class="sh">דף ${gematriya(d)} עמוד ${sd === 'a' ? 'א' : 'ב'}</h3>${segs(t[i])}`;
+        }
+      }
+    } else if (k === 'mishnayomi') {
+      for (const m of ev.mishnaYomi) {
+        const t = await load(idx.mishnah[m.k]);
+        const [c, v] = num(m.v);
+        h += `<h3 class="sh">פרק ${gematriya(c)} משנה ${gematriya(v)}</h3><p class="tx">${(t[c - 1] || [])[v - 1] || ''}</p>`;
+      }
+    } else if (k === 'rambam1' || k === 'rambam3') {
+      const list = k === 'rambam1' ? [ev.reading] : ev.readings;
+      for (const r of list) {
+        const t = await load(idx.rambam[r.name]);
+        const [[a], [b]] = rangeParse(r.perek);
+        for (let p = a; p <= b; p++) h += `<h3 class="sh">פרק ${gematriya(p)}</h3>${(t[p - 1] || []).map((x, i) => `<p class="tx"><sup>${gematriya(i + 1)}</sup>${x}</p>`).join('')}`;
+      }
+    } else if (k === 'kitzurshulchanaruch' || k === 'arukhhashulchanyomi') {
+      if (k === 'arukhhashulchanyomi' && ev.reading.k !== 'Orach Chaim') throw new Error('missing');
+      const t = await load(k === 'kitzurshulchanaruch' ? 'kitzur' : 'arukh_oc');
+      const [[s1, f1], [s2, f2]] = rangeParse(k === 'kitzurshulchanaruch' ? ev.reading.b + '-' + (ev.reading.e || ev.reading.b) : ev.reading.v);
+      for (let si = s1; si <= s2; si++) {
+        const sim = t[si - 1] || [];
+        const a = si === s1 ? f1 || 1 : 1, b = si === s2 ? f2 || sim.length : sim.length;
+        h += `<h3 class="sh">סימן ${gematriya(si)}</h3>`;
+        for (let f = a; f <= b; f++) if (sim[f - 1]) h += `<p class="tx"><sup>${gematriya(f)}</sup>${sim[f - 1]}</p>`;
+      }
+    } else if (k === 'chofetzchaim' || k === 'shemirathalashon') {
+      const memo = ev.memo || desc;
+      let t = await load(k === 'chofetzchaim' ? 'chafetz' : 'shemirat');
+      let section = null, label = '';
+      if (k === 'shemirathalashon') {
+        const bk = /Book II/.test(memo) ? 'Book II' : 'Book I';
+        const sub = Object.keys(t[bk]).filter((x) => x && memo.includes(x)).sort((x, y) => y.length - x.length)[0] || '';
+        section = t[bk][sub]; label = sub;
+      } else {
+        const key = Object.keys(t).filter((x) => memo.startsWith(x)).sort((x, y) => y.length - x.length)[0] ||
+          Object.keys(t).find((x) => memo.startsWith(x.split(' ')[0]));
+        section = t[key];
+        if (section && !Array.isArray(section)) {
+          const sub = Object.keys(section).filter((x) => x && memo.includes(x)).sort((x, y) => y.length - x.length)[0];
+          section = sub ? section[sub] : Object.values(section).map((v) => (Array.isArray(v) ? v : v[''] || Object.values(v).flat()));
+        }
+      }
+      const m = memo.match(/([\d.]+)(?:-([\d.]+))?(?:\s|$)/);
+      if (!section || !m) throw new Error('missing');
+      const [b, e] = [num(m[1]), num(m[2] || m[1])];
+      if (Array.isArray(section) && Array.isArray(section[0])) {
+        for (let c = b[0]; c <= e[0]; c++) {
+          const ch = section[c - 1] || [];
+          const from = c === b[0] ? b[1] || 1 : 1, to = c === e[0] ? e[1] || ch.length : ch.length;
+          h += `<h3 class="sh">פרק ${gematriya(c)}</h3>`;
+          for (let v = from; v <= to; v++) if (ch[v - 1]) h += `<p class="tx"><sup>${gematriya(v)}</sup>${ch[v - 1]}</p>`;
+        }
+      } else if (Array.isArray(section)) {
+        for (let v = b[0]; v <= e[0]; v++) if (section[v - 1]) h += `<p class="tx">${section[v - 1]}</p>`;
+      }
+    } else if (k === 'tanyayomi') {
+      const t = await load('tanya');
+      const key = Object.keys(t).find((x) => x.includes(ev.reading.book));
+      let sec = t[key];
+      if (!Array.isArray(sec)) sec = sec[''] || Object.values(sec).find(Array.isArray);
+      const ch = Array.isArray(sec[0]) ? sec[ev.reading.chap - 1] : sec;
+      h += `<h3 class="sh">פרק ${gematriya(ev.reading.chap)}</h3>${segs(ch)}`;
+    } else if (k === 'nachyomi') {
+      await load(bookKey(ev.k));
+      const t = window.D[bookKey(ev.k)];
+      h += `<h3 class="sh">${HEB_BOOK[ev.k] || ev.k} ${gematriya(ev.v)}</h3><p class="tx">${refText(ev.k, ev.v + ':1', ev.v + ':' + t[ev.v - 1].length)}</p>`;
+    } else throw new Error('missing');
+  } catch (e) {
+    h += '<p class="empty">הטקסט של הלימוד הזה עדיין לא זמין באפליקציה.</p>';
+  }
+  $('main').innerHTML = h;
 }
 
 async function renderMB() {
@@ -617,6 +724,7 @@ function route() {
     if (a === 'selichot') return renderSelichot();
     if (a === 'learn') return renderLearn();
     if (a === 'mb') return renderMB();
+    if (a === 'l') return renderLearnItem(b);
     if (a === 'zmanim') return renderZmanim();
     if (a === 'settings') return renderSettings();
     return renderHome();
