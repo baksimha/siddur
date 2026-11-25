@@ -278,17 +278,51 @@ function refText(book, b, e) {
   return h;
 }
 
-async function readingHtml(ley, shabbat = false) {
+const SHABBAT_ALIYA = ['', 'ראשון · כהן', 'שני · לוי', 'שלישי · ישראל', 'רביעי', 'חמישי', 'שישי', 'שביעי'];
+const ALL_MARKS = /[\u0591-\u05C7]/g;
+
+function verseList(book, b, e) {
+  const [c1, v1] = b.split(':').map(Number);
+  const [c2, v2] = e.split(':').map(Number);
+  const out = [];
+  const t = window.D[bookKey(book)];
+  for (let c = c1; c <= c2; c++) {
+    const ch = t[c - 1] || [];
+    const from = c === c1 ? v1 : 1, to = c === c2 ? v2 : ch.length;
+    for (let v = from; v <= to; v++) out.push([c, v]);
+  }
+  return out;
+}
+
+async function readingHtml(ley, shabbat = false, mode = 'regular') {
   if (!ley) return '';
   const al = ley.weekday || ley.fullkriyah;
   if (!al) return '';
   const keys = Object.keys(al).filter((k) => al[k] && al[k].k);
-  await Promise.all([...new Set(keys.map((k) => al[k].k))].map((b) => load(bookKey(b))));
+  const books = [...new Set(keys.map((k) => al[k].k))];
+  await Promise.all(books.map((b) => load(bookKey(b))));
+  const torahBook = (b) => ['Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy'].includes(b);
+  if (mode === 'shnayim') await Promise.all(books.filter(torahBook).map((b) => load('onkelos_' + b)));
+  if (mode === 'tikkun') await Promise.all(books.filter(torahBook).map((b) => load('taamim_' + b)));
   let h = `<div class="block-title">הקריאה: ${esc(ley.name && ley.name.he ? ley.name.he : '')}</div>`;
   for (const k of keys) {
     const a = al[k];
-    const nm = (shabbat ? ['', 'ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שביעי'] : ALIYA)[+k] || (k === 'M' ? 'מפטיר' : k);
-    h += `<p class="lbl">${nm}</p><p class="tx">${refText(a.k, a.b, a.e)}</p>`;
+    const nm = (shabbat ? SHABBAT_ALIYA : ALIYA)[+k] || (k === 'M' ? 'מפטיר' : k);
+    h += `<p class="aliya">${nm}</p>`;
+    if (mode === 'regular' || !torahBook(a.k)) { h += `<p class="tx">${refText(a.k, a.b, a.e)}</p>`; continue; }
+    const plainT = window.D[bookKey(a.k)];
+    for (const [c, v] of verseList(a.k, a.b, a.e)) {
+      const verse = (plainT[c - 1] || [])[v - 1] || '';
+      const num = `<sup>${gematriya(c)}:${gematriya(v)}</sup>`;
+      if (mode === 'shnayim') {
+        const onk = ((window.D['onkelos_' + a.k] || [])[c - 1] || [])[v - 1] || '';
+        h += `<div class="sm"><p class="tx">${num}${verse}</p><p class="tx">${verse}</p><p class="tx onk">${onk}</p></div>`;
+      } else {
+        const ta = ((window.D['taamim_' + a.k] || [])[c - 1] || [])[v - 1] || verse;
+        const stam = ta.replace(/\u05BE/g, ' ').replace(/[\u05C0\u05C3]/g, '').replace(ALL_MARKS, '').replace(/\s+/g, ' ');
+        h += `<div class="tk"><p class="tx taam">${num}${ta}</p><p class="tx stam">${stam}</p></div>`;
+      }
+    }
   }
   return h;
 }
@@ -667,8 +701,12 @@ async function renderParasha(name) {
   try { ley = name === 'today' ? getLeyningOnDate(new HDate(NOW()), true) : getLeyningForParsha(name); } catch (e) { ley = null; }
   if (!ley) { $('main').innerHTML = '<p class="empty">לא נמצאה קריאה.</p>'; return; }
   const shabbat = name !== 'today';
-  let h = `<div class="banner">${esc(ley.name && ley.name.he ? (shabbat ? 'פרשת ' : '') + ley.name.he : '')}</div>`;
-  h += await readingHtml(name === 'today' ? ley : { ...ley, weekday: null }, shabbat);
+  const mode = S.torahMode || 'regular';
+  const modes = [['regular', 'רגיל'], ['shnayim', 'שניים מקרא ואחד תרגום'], ['tikkun', 'טעמים מול ספר תורה']];
+  let h = `<div class="banner">${esc(ley.name && ley.name.he ? (shabbat ? 'פרשת ' : '') + ley.name.he : '')}</div>
+    <div class="seg" role="group" aria-label="תצוגה">${modes.map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  if (mode === 'tikkun') h += '<p class="hint">מימין: עם ניקוד וטעמים. משמאל: כמו שכתוב בספר התורה.</p>';
+  h += await readingHtml(name === 'today' ? ley : { ...ley, weekday: null }, shabbat, mode);
   const haft = shabbat ? (S.nusach === 'edot' && ley.seph ? ley.seph : ley.haft) : null;
   if (haft) {
     const parts = Array.isArray(haft) ? haft : [haft];
@@ -676,6 +714,7 @@ async function renderParasha(name) {
     h += '<h2 class="ph">הפטרה</h2>' + parts.map((p) => `<h3 class="sh">${HEB_BOOK[p.k] || p.k}</h3><p class="tx">${refText(p.k, p.b, p.e)}</p>`).join('');
   }
   $('main').innerHTML = h;
+  document.querySelectorAll('.seg button').forEach((bt) => { bt.onclick = () => { S.torahMode = bt.dataset.mode; save(); renderParasha(name); }; });
 }
 
 function renderTanakh() {
