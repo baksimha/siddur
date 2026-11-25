@@ -50,7 +50,7 @@
       <label class="sw"><span>\u05DE\u05E6\u05D1 \u05DC\u05D9\u05DC\u05D4</span><input type="checkbox" id="night" ${he.night?"checked":""}></label>
       <label class="sw"><span>\u05D4\u05E6\u05D2 \u05D4\u05D5\u05E8\u05D0\u05D5\u05EA \u05D5\u05D4\u05DC\u05DB\u05D5\u05EA \u05E7\u05D8\u05E0\u05D5\u05EA</span><input type="checkbox" id="notes" ${he.notes?"checked":""}></label>
       <label>\u05D2\u05D5\u05D3\u05DC \u05DB\u05EA\u05D1 <input type="range" id="font" min="16" max="36" step="1" value="${he.font}"></label>
-      <p class="tx" id="sample" style="margin:0">\u05D1\u05B8\u05BC\u05E8\u05D5\u05BC\u05DA\u05B0 \u05D0\u05B7\u05EA\u05B8\u05BC\u05D4 \u05D9\u05B0\u05D4\u05B9\u05D5\u05B8\u05D4</p>
+      <p id="sample" style="margin:0">\u05D1\u05B8\u05BC\u05E8\u05D5\u05BC\u05DA\u05B0 \u05D0\u05B7\u05EA\u05B8\u05BC\u05D4 \u05D9\u05B0\u05D4\u05B9\u05D5\u05B8\u05D4 \u05D0\u05B1\u05DC\u05B9\u05D4\u05B5\u05D9\u05E0\u05D5\u05BC \u05DE\u05B6\u05DC\u05B6\u05DA\u05B0 \u05D4\u05B8\u05E2\u05D5\u05B9\u05DC\u05B8\u05DD</p>
     </section>
     <section class="card form">
       <h2>\u05DC\u05D9\u05DE\u05D5\u05D3 \u05D9\u05D5\u05DE\u05D9</h2>

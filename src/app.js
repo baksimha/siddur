@@ -877,7 +877,7 @@ function renderSettings() {
       <label class="sw"><span>מצב לילה</span><input type="checkbox" id="night" ${S.night ? 'checked' : ''}></label>
       <label class="sw"><span>הצג הוראות והלכות קטנות</span><input type="checkbox" id="notes" ${S.notes ? 'checked' : ''}></label>
       <label>גודל כתב <input type="range" id="font" min="16" max="36" step="1" value="${S.font}"></label>
-      <p class="tx" id="sample" style="margin:0">בָּרוּךְ אַתָּה יְהֹוָה</p>
+      <p id="sample" style="margin:0">בָּרוּךְ אַתָּה יְהֹוָה אֱלֹהֵינוּ מֶלֶךְ הָעוֹלָם</p>
     </section>
     <section class="card form">
       <h2>לימוד יומי</h2>
