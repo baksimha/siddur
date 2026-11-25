@@ -13,6 +13,8 @@
 @font-face{font-family:Heebo;font-weight:400;src:url(fonts/heebo-latin-400-normal.woff2) format('woff2');unicode-range:U+0000-00FF}
 @font-face{font-family:Noto;font-weight:400;src:url(fonts/noto-serif-hebrew-hebrew-400-normal.woff2) format('woff2')}
 @font-face{font-family:Noto;font-weight:700;src:url(fonts/noto-serif-hebrew-hebrew-700-normal.woff2) format('woff2')}
+@font-face{font-family:StamA;src:url(fonts/StamAshkenazCLM.woff) format('woff')}
+@font-face{font-family:StamS;src:url(fonts/StamSefaradCLM.woff) format('woff')}
 @font-face{font-family:Frank;font-weight:400;src:url(fonts/frank-ruhl-libre-hebrew-400-normal.woff2) format('woff2')}
 @font-face{font-family:Frank;font-weight:700;src:url(fonts/frank-ruhl-libre-hebrew-700-normal.woff2) format('woff2')}
 :root{--bg:#F8FAFC;--card:#FFFFFF;--ink:#111827;--mute:#6B7280;--line:#E5E7EB;--pri:#3B82F6;--pri2:#2563EB;--red:#DC2626;--fs:22px}
@@ -86,7 +88,8 @@ a{color:inherit;text-decoration:none}
 .tk{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-bottom:1px solid var(--line);padding:8px 0;align-items:start}
 .reading .tk .tx{margin:0;text-align:right}
 .reading .taam{font-family:Noto,Frank,serif;line-height:2.1}
-.reading .stam{font-family:Frank,serif;font-weight:700;line-height:2.1}
+.reading .stam{font-family:StamA,Frank,serif;font-size:calc(var(--fs) * 1.1);line-height:2;font-weight:400}
+.n-edot .reading .stam{font-family:StamS,Frank,serif}
 .pnames{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:6px 0}
 .pname{min-height:44px;border-radius:10px;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;text-align:center;font-family:Frank,serif;font-size:16px;padding:4px}
 .pager{display:flex;justify-content:space-between;margin:20px 0;font-weight:700;color:var(--pri2)}

@@ -18,6 +18,7 @@ try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('siddur.settings') |
 function save() { try { localStorage.setItem('siddur.settings', JSON.stringify(S)); } catch (e) { /* ignore */ } applyTheme(); }
 function applyTheme() {
   document.documentElement.classList.toggle('night', !!S.night);
+  document.documentElement.classList.toggle('n-edot', S.nusach === 'edot');
   document.documentElement.style.setProperty('--fs', S.font + 'px');
 }
 
@@ -705,7 +706,7 @@ async function renderParasha(name) {
   const modes = [['regular', 'רגיל'], ['shnayim', 'שניים מקרא ואחד תרגום'], ['tikkun', 'טעמים מול ספר תורה']];
   let h = `<div class="banner">${esc(ley.name && ley.name.he ? (shabbat ? 'פרשת ' : '') + ley.name.he : '')}</div>
     <div class="seg" role="group" aria-label="תצוגה">${modes.map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}">${l}</button>`).join('')}</div>`;
-  if (mode === 'tikkun') h += '<p class="hint">מימין: עם ניקוד וטעמים. משמאל: כמו שכתוב בספר התורה.</p>';
+  if (mode === 'tikkun') h += '<p class="hint">מימין: עם ניקוד וטעמים. משמאל: בכתב סת״ם, כמו בספר התורה.</p>';
   h += await readingHtml(name === 'today' ? ley : { ...ley, weekday: null }, shabbat, mode);
   const haft = shabbat ? (S.nusach === 'edot' && ley.seph ? ley.seph : ley.haft) : null;
   if (haft) {
