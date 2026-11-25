@@ -340,7 +340,7 @@ async function renderPrayer(id) {
     if (part.reading) {
       try { body += await readingHtml(getLeyningOnDate(ctx.hd, true)); } catch (e) { /* no reading */ }
     }
-    if (!strip(body).replace(/\s+/g, '').length) continue;
+    if (!/class="tx/.test(body)) continue;
     const anchor = 'sec' + n++;
     const title = typeof part.t === 'function' ? part.t(ctx) : part.t;
     toc.push([anchor, title]);

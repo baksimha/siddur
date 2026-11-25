@@ -31,13 +31,46 @@ export function classify(seg) {
       return { t: 'text', html: m[4], inlineLabel: labPlain.replace(/[()]/g, ''), cond, small: false };
     }
   }
+  // "<small>instruction<br>prayer text</small>": the instruction decides whether the text is said
+  const ib = s.match(/^\s*(?:<small>\s*)+([^<]{3,200}?)\s*<br>([\s\S]+)$/);
+  if (ib && !NIK.test(ib[1]) && NIK.test(strip(ib[2]))) {
+    return { t: 'text', html: ib[2].replace(/(<\/small>\s*)+$/, ''), small: false, cond: condFromLabel(ib[1]) || null, inlineLabel: ib[1] };
+  }
+  // a small paragraph that opens with plain (unvocalized) words is an instruction, unless it is a known variant
+  if (smallWrapped && !NIK.test(plain.slice(0, 22))) {
+    const lm = plain.match(/^\s*\(?([^:\u05B0-\u05BC]{2,40}):/);
+    if (!(lm && condFromLabel(lm[1]))) return { t: 'note', text: plain, cond: null };
+  }
+  // paragraphs that belong to a special day even when the siddur gives them no label
+  const pn = plain.replace(/[\u0591-\u05C7]/g, '').replace(/^[\s(]+/, '');
+  if (/^ו?על הנסים ועל הפרקן/.test(pn)) return { t: 'text', html: s, small: smallWrapped, cond: 'chanukah|purim' };
   return { t: 'text', html: s, small: smallWrapped };
 }
 
 const HEB_FLEX = (word) => word.split('').map((ch) => (ch === ' ' ? '\\s+' : ch + '[\\u0591-\\u05C7]*')).join('');
 
+function inlineVariants(h, ctx) {
+  const put = (label, content, all) => {
+    const cond = condFromLabel(label.replace(/[()]/g, ''));
+    if (!cond) return all;
+    if (!evalCond(cond, ctx)) return '';
+    return RED.has(cond) ? '<span class="ins">' + content + '</span>' : content;
+  };
+  let prev;
+  do {
+    prev = h;
+    // <small><small>LABEL:</small> text</small>
+    h = h.replace(/<small>\s*<small>\s*([^<\u05B0-\u05BC]{2,40}?)\s*<\/small>((?:(?!<small>)[\s\S])*?)<\/small>/g, (all, l, c) => put(l, c, all));
+  } while (h !== prev);
+  // <small>LABEL: text</small>
+  h = h.replace(/<small>\s*([^<\u05B0-\u05BC:]{2,40}):\s*([^<]+)<\/small>/g, (all, l, c) => put(l, c, all));
+  // <em>LABEL:</em> text<br>
+  h = h.replace(/<em>\s*([^<]{2,40}?):?\s*<\/em>\s*([^<]*)(<br>)?/g, (all, l, c, br) => { const r = put(l, c, all); return r === all ? all : (r ? r + (br || '') : ''); });
+  return h;
+}
+
 export function transformHtml(html, ctx, settings) {
-  let h = html;
+  let h = inlineVariants(html, ctx);
   // inline Ten Days of Repentance variants
   const ayt = '\\(\\s*<small>\\s*בעשי"ת\\s*</small>\\s*';
   h = h.replace(new RegExp('(' + HEB_FLEX('שלום') + ')\\s*' + ayt + '([^)]*)\\)', 'g'), (all, a, b) => (ctx.ayt ? '<span class="ins">' + b.trim() + '</span>' : a));

@@ -254,10 +254,12 @@ export function condFromLabel(raw) {
   if (/בימות החמה/.test(t)) return '!talumatar';
   if (/בימות הגשמים/.test(t)) return 'talumatar';
   if (/מי שרוצה להתפלל על החולה/.test(t)) return 'sick';
+  if (/קדיש (יתום|שלם|דרבנן|תתקבל|יהא שלמא|"יהא שלמא")|חצי קדיש|^ואומרים קדיש/.test(t) && t.length < 60) return 'always';
   if (/בחול קודם ברכת המזון/.test(t)) return 'tachanun';
   if (/בשבת קודם ברכת המזון/.test(t)) return '!tachanun';
   if (/בימים שגומרים את ההלל|שאין גומרים/.test(t)) return 'fullhallel';
   if (/בחנוכה ופורים/.test(t)) return 'chanukah|purim';
+  if (/צומות/.test(t)) return 'never';
   if (/בראש חו?דש אומרים כאן הלל|שאין אומרים בהם תחנון יאמר|בתענית צי?בור השליח|כשמתפללים מנחה קטנה|אם אין כהנים|והכהנים אחריו|בכל לילות החול מלבד/.test(t)) return 'never';
   if (/מדלגים למנצח/.test(t)) return 'never';
   if (/ביום שיש בו תחנון/.test(t)) return 'tachanun';
@@ -281,7 +283,9 @@ export function condFromLabel(raw) {
   if (/^(ל|ב)?ר"ח|^בראש חו?דש|^בר"ח|יש נוהגין לומר בר"ח/.test(t)) return 'rc';
   if (/^(ל|ב)פסח/.test(t)) return 'cholPesach';
   if (/^(ל|ב)סכות|^(ל|ב)סוכות/.test(t)) return 'cholSukkot';
-  if (/בשבועות|לש"ע|לר"ה|ביו"ט|יו"כ|בראש השנה|לשמיני|ילדים האוכלים/.test(t)) return 'never';
+  if (/בשבועות|לש"ע|לר"ה|ביו"ט|יו"כ|בראש השנה|לשמיני|בשמיני|ילדים האוכלים|רגלים|ביום טוב/.test(t)) return 'never';
+  if (/^(ב|ל)?חוה"מ פסח|^בחול המועד פסח/.test(t)) return 'cholPesach';
+  if (/^(ב|ל)?חוה"מ סוכות|^בחול המועד סוכות/.test(t)) return 'cholSukkot';
   if (/^בחנוכה/.test(t)) return 'chanukah';
   if (/^בפורים/.test(t)) return 'purim';
   if (/אומר כאן הש"ץ|ברכת כהנים/.test(t)) return 'never';
