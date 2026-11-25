@@ -120,3 +120,25 @@ for b in ['Daniel', 'Ezra', 'Nehemiah', 'I Chronicles', 'II Chronicles', 'Job', 
 
 total += write('learn_index', index)
 print('total bytes', total, {k: len(v) for k, v in index.items()})
+
+# --- Ashkenaz & Edot HaMizrach siddurim
+def clean_sid(x):
+    if isinstance(x, list):
+        return [clean_sid(y) for y in x]
+    if isinstance(x, dict):
+        return {k: clean_sid(v) for k, v in x.items()}
+    if not isinstance(x, str):
+        return x
+    x = TAAMIM.sub('', x).replace('׀', '')
+    x = re.sub(r'\s*\((?:תהילים|תהלים|דניאל|ישעיה|במדבר|שמות)[^)]{0,30}\)', '', x)
+    return x
+
+ash = load('Liturgy/Siddur/Siddur Ashkenaz/Hebrew/merged.json')['text']
+ash.pop('Shabbat', None)
+print('ashkenaz', write('ashkenaz', clean_sid(ash)))
+em = load('Liturgy/Siddur/Siddur Edot HaMizrach/Hebrew/merged.json')['text']
+for k in ['Shabbat Candle Lighting', 'Song of Songs', 'Kabbalat Shabbat', 'Shabbat Arvit', 'Shabbat Evening', 'Shabbat Shacharit',
+          'Shabbat Mussaf', 'Daytime Meal', 'Shabbat Mincha', 'Third Meal', 'Mishna Study for Shabbat', 'Prayers for Three Festivals']:
+    em.pop(k, None)
+print('edot', write('edot', clean_sid(em)))
+print('selichot_edot', write('selichot_edot', clean_sid(load('Liturgy/High Holidays/Selichot Edot HaMizrach/Hebrew/merged.json')['text'])))

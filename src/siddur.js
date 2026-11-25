@@ -66,6 +66,13 @@ function sickHtml(base, names) {
  * opts: { from, to, ranges: [[from,to,cond]], key }
  * returns array of items {k:'text'|'label'|'heading'|'note', html, red}
  */
+export function flatten(node) {
+  if (typeof node === 'string') return [node];
+  if (Array.isArray(node)) return node.flatMap(flatten);
+  if (node && typeof node === 'object') return Object.values(node).flatMap(flatten);
+  return [];
+}
+
 export function renderSegments(segs, ctx, settings, opts = {}) {
   const out = [];
   const n = segs.length;
@@ -77,6 +84,35 @@ export function renderSegments(segs, ctx, settings, opts = {}) {
   };
   const names = (settings.names || []).filter((x) => x.trim());
   let stopAll = false;
+  // hidden by grouping rules (Omer day, song of the day, half Hallel)
+  const hide = new Set();
+  const plainN = (x) => strip(x || '').replace(/[\u0591-\u05C7]/g, '').trim();
+  if (opts.omer) {
+    let g = 0;
+    for (let q = 0; q < n; q++) {
+      if (/^\S{1,4}\s(ניסן|אייר|סיון|סיוון)/.test(plainN(segs[q]))) {
+        g++;
+        let r = q + 1;
+        while (r < n && !/^\S{1,4}\s(ניסן|אייר|סיון|סיוון)/.test(plainN(segs[r])) && (!NIK.test(strip(segs[r])) || /עמר/.test(plainN(segs[r]))) && strip(segs[r]).length < 200) r++;
+        if (g !== opts.omer) for (let z = q; z < r; z++) hide.add(z);
+        q = r - 1;
+      }
+    }
+  }
+  if (opts.songDay !== undefined) {
+    const DN = { 'ראשון': 0, 'שני': 1, 'שלישי': 2, 'רביעי': 3, 'חמישי': 4, 'ששי': 5, 'שישי': 5 };
+    for (let q = 0; q < n; q++) {
+      const mm = plainN(segs[q]).match(/^מזמור ליום (ראשון|שני|שלישי|רביעי|חמישי|ששי|שישי)/);
+      if (!mm) continue;
+      let r = q + 1;
+      while (r < n && !/^מזמור ליום/.test(plainN(segs[r])) && NIK.test(strip(segs[r]))) r++;
+      if (DN[mm[1]] !== opts.songDay) for (let z = q; z < r; z++) hide.add(z);
+      q = r - 1;
+    }
+  }
+  if (opts.hallel && !ctx.fullHallel) {
+    for (let q = 0; q < n; q++) if (/^(לא לנו|אהבתי כי ישמע)/.test(plainN(segs[q]))) hide.add(q);
+  }
   const emitText = (i, c, red) => {
     let src = c.html;
     if (c.multi) {
@@ -95,7 +131,7 @@ export function renderSegments(segs, ctx, settings, opts = {}) {
   let i = from;
   while (i <= to) {
     const rc = rangeCond(i);
-    if (rc && !evalCond(rc, ctx)) { i++; continue; }
+    if ((rc && !evalCond(rc, ctx)) || hide.has(i)) { i++; continue; }
     const c = classify(segs[i]);
     if (c.t === 'empty') { i++; continue; }
     if (c.t === 'label' && c.cond === 'stopchanukah') {
@@ -108,7 +144,7 @@ export function renderSegments(segs, ctx, settings, opts = {}) {
       let j = i + 1, firstSmall = null;
       while (j <= to) {
         const cj = classify(segs[j]);
-        if (cj.t === 'empty') { j++; continue; }
+        if (cj.t === 'empty' || hide.has(j)) { j++; continue; }
         if (cj.t === 'heading' || cj.t === 'note' || (cj.t === 'label' && cj.cond)) break;
         if (cj.t === 'label') { scope.push([j, cj]); j++; continue; }
         if (firstSmall !== null) {
@@ -151,16 +187,19 @@ export function renderSegments(segs, ctx, settings, opts = {}) {
   // names for the sick in Amidah sections without a ready-made slot
   if (opts.amidah && names.length && !ctx._sickDone) {
     const re = new RegExp(HEB_FLEX('כי אל מלך רופא'));
-    for (let q = 0; q < out.length; q++) {
+    const refa = /ר[\u0591-\u05C7]*פ[\u0591-\u05C7]*א[\u0591-\u05C7]*נ[\u0591-\u05C7]*ו/;
+    let done = false;
+    for (let q = 0; q < out.length && !done; q++) {
       const it = out[q];
-      if (it.k !== 'text') continue;
+      if (it.k !== 'text' || !refa.test(it.html)) continue;
       const mm = it.html.match(re);
-      if (mm && /ר[֑-ׇ]*פ[֑-ׇ]*א[֑-ׇ]*נ[֑-ׇ]*ו/.test(it.html)) {
-        const pos = mm.index;
-        const a = it.html.slice(0, pos), b = it.html.slice(pos);
+      if (mm) {
+        const a = it.html.slice(0, mm.index), b = it.html.slice(mm.index);
         out.splice(q, 1, { k: 'text', html: a }, { k: 'text', html: sickHtml(null, names), red: true }, { k: 'text', html: b });
-        break;
+      } else {
+        out.splice(q + 1, 0, { k: 'text', html: sickHtml(null, names), red: true });
       }
+      done = true;
     }
   }
   ctx._sickDone = false;

@@ -80,7 +80,12 @@ function eventsOn(hd, il) {
   return HebrewCalendar.getHolidaysOnDate(hd, il) || [];
 }
 
-function inSelichotSeason(hd) {
+function inSelichotSeason(hd, nusach) {
+  if (nusach === 'edot') {
+    const m0 = hd.getMonth(), d0 = hd.getDate();
+    if (hd.getDay() === 6) return false;
+    return (m0 === M.ELUL && d0 >= 2) || (m0 === M.TISHREI && d0 >= 3 && d0 <= 9);
+  }
   // Ashkenaz (and Sefard) custom: from motzaei Shabbat before Rosh Hashana (at least 4 days), through erev Yom Kippur.
   const y = hd.getFullYear();
   const rh = new HDate(1, M.TISHREI, y + (hd.getMonth() === M.TISHREI ? 0 : 1));
@@ -225,7 +230,11 @@ export function dayCtx(hd, opts = {}) {
     hallel, fullHallel, elul, torah, avinu,
     winter: winterIL(hd), talumatar: talUmatarIL(hd),
     omer: omerDay(hd), descs, events: evs,
-    selichot: inSelichotSeason(hd),
+    selichot: inSelichotSeason(hd, opts.nusach),
+    gedaliaTevet: descs.some((x) => /Gedaliah|Tevet/.test(x)),
+    esther: descs.some((x) => /Esther/.test(x)),
+    tamuz: descs.some((x) => /Tamuz|Tammuz/.test(x)),
+    erevShabbat: dow === 5,
     levana: d >= 7 && d <= 15 && !(m === M.AV && d < 10) && !(m === M.TISHREI && d < 10),
     motzash: !!opts.motzash,
     sick: true,
@@ -237,7 +246,7 @@ export function dayCtx(hd, opts = {}) {
 export function condFromLabel(raw) {
   const t = raw.replace(/[֑-ׇ]/g, '').replace(/[״“”]/g, '"').replace(/[׳’]/g, "'").replace(/[()]/g, '').trim();
   if (!t) return null;
-  if (/מדלגין זה/.test(t)) return 'fullhallel';
+  if (/מדלגין/.test(t)) return 'fullhallel';
   if (/עד כאן אומרים בחנוכה/.test(t)) return 'stopchanukah';
   if (/עשי"ת|עשרת ימי תשובה|בעשי"ת/.test(t)) return 'ayt';
   if (/^בקיץ/.test(t)) return '!winter';
@@ -247,6 +256,22 @@ export function condFromLabel(raw) {
   if (/מי שרוצה להתפלל על החולה/.test(t)) return 'sick';
   if (/בחול קודם ברכת המזון/.test(t)) return 'tachanun';
   if (/בשבת קודם ברכת המזון/.test(t)) return '!tachanun';
+  if (/בימים שגומרים את ההלל|שאין גומרים/.test(t)) return 'fullhallel';
+  if (/בחנוכה ופורים/.test(t)) return 'chanukah|purim';
+  if (/בראש חו?דש אומרים כאן הלל|שאין אומרים בהם תחנון יאמר|בתענית צי?בור השליח|כשמתפללים מנחה קטנה|אם אין כהנים|והכהנים אחריו|בכל לילות החול מלבד/.test(t)) return 'never';
+  if (/מדלגים למנצח/.test(t)) return 'never';
+  if (/ביום שיש בו תחנון/.test(t)) return 'tachanun';
+  if (/ביום שאין בו תחנון|בימים שאין בהם תחנון אומרים/.test(t)) return '!tachanun';
+  if (/בימי?ם? שני וחמישי מוסיפים/.test(t)) return 'monthu';
+  if (/בימי?ם? שני וחמישי אין אומרים/.test(t)) return '!monthu';
+  if (/בצום גדליה ובעשרה בטבת/.test(t)) return 'gedaliaTevet';
+  if (/בתענית אסתר ובפורים/.test(t)) return 'esther|purim';
+  if (/בשבעה עשר בתמוז/.test(t)) return 'tamuz';
+  if (/למחרת יום הכיפורים/.test(t)) return 'never';
+  if (/בערב שבת אין אומרים/.test(t)) return '!erevShabbat';
+  if (/בערב שבת אומרים/.test(t)) return 'erevShabbat';
+  if (/בליל ראש חו?דש/.test(t)) return 'rc';
+  if (/במוצאי שבת/.test(t)) return 'motzash';
   const dows = { 'ראשון': 0, 'שני': 1, 'שלישי': 2, 'רביעי': 3, 'חמישי': 4, 'שישי': 5, 'ששי': 5 };
   const mm = t.match(/^ב(ראשון|שני|שלישי|רביעי|חמישי|שישי|ששי) בשבת/) || t.match(/^שיר של יום (ראשון|שני|שלישי|רביעי|חמישי|שישי|ששי)/);
   if (mm) return 'dow:' + dows[mm[1]];

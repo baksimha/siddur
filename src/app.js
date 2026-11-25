@@ -1,6 +1,6 @@
 import { HDate, months, DailyLearning, getLeyningOnDate, CITIES, cityInfo, zmanim, nowHDate, dayCtx, selichotKey } from './cal.js';
 import { gematriya } from '@hebcal/core';
-import { renderSegments, strip } from './siddur.js';
+import { renderSegments, strip, flatten } from './siddur.js';
 
 /* ---------------- clock (a ?date=YYYY-MM-DDTHH:MM param lets you preview another day) ---------------- */
 const TEST = (location.search.match(/[?&]date=([^&]+)/) || [])[1];
@@ -104,13 +104,13 @@ function ctxFor(prayer, now = NOW()) {
     const n = nowHDate(S.city, now);
     hd = n.hd;
   }
-  return dayCtx(hd, { prayer, walled: ci.walled, purim: S.purim, motzash });
+  return dayCtx(hd, { prayer, walled: ci.walled, purim: S.purim, motzash, nusach: S.nusach });
 }
 
 function hebDate(hd) { return hd.renderGematriya(true).replace(/\s*תש/, ' תש'); }
 
 /* ---------------- prayer programs (Nusach Sefard) ---------------- */
-const P = {
+const P_SEFARD = {
   shacharit: {
     title: 'שחרית',
     parts: [
@@ -155,6 +155,108 @@ const P = {
       { t: 'עלינו', p: [['Weekday Maariv', 'Amidah']], from: 113 },
     ],
   },
+};
+
+
+const q = (path, cond, extra = {}) => ({ path, cond, ...extra });
+const AS = ['Weekday', 'Shacharit'];
+const AM = ['Weekday', 'Minchah'];
+const AV = ['Weekday', 'Maariv'];
+const P_ASHKENAZ = {
+  shacharit: {
+    title: 'שחרית',
+    parts: [
+      { t: 'השכמת הבוקר', p: ['Modeh Ani', 'Netilat Yadayim', 'Asher Yatzar', 'Elokai Neshama', 'Tzitzit', 'Torah Blessings', 'Torah Study', 'Tallit'].map((k) => q([...AS, 'Preparatory Prayers', k])).concat([q([...AS, 'Preparatory Prayers', 'Tefillin'], '!tishabav')]) },
+      { t: 'מה טובו ואדון עולם', p: ['Ma Tovu', 'Adon Olam', 'Yigdal'].map((k) => q([...AS, 'Preparatory Prayers', k])) },
+      { t: 'ברכות השחר', p: ['Morning Blessings', 'Akedah', 'Sovereignty of Heaven'].map((k) => q([...AS, 'Preparatory Prayers', k])) },
+      { t: 'קרבנות', p: [q([...AS, 'Preparatory Prayers', 'Korbanot'])] },
+      { t: 'פסוקי דזמרה', p: ['Introductory Psalm', "Mourner's Kaddish", "Barukh She'amar", 'Hodu', 'Mizmor Letoda', 'Yehi Chevod', 'Ashrei', 'Psalm 146', 'Psalm 147', 'Psalm 148', 'Psalm 149', 'Psalm 150', 'Closing Verses', 'Vayevarech David', 'Ata Hu', 'Az Yashir', 'Yishtabach'].map((k) => q([...AS, 'Pesukei Dezimra', k])).concat([q([...AS, 'Pesukei Dezimra', 'Psalm 130'], 'ayt'), q([...AS, 'Pesukei Dezimra', 'Half Kaddish'])]) },
+      { t: 'קריאת שמע', p: [q([...AS, 'Blessings of the Shema'])] },
+      { t: 'עמידה', p: [q([...AS, 'Amidah'])], amidah: true },
+      { t: 'הלל', cond: 'hallel', p: [q(['Festivals', 'Rosh Chodesh', 'Hallel'])], hallel: true },
+      { t: 'סליחות', cond: 'minorFast', fastSelichot: true },
+      { t: 'אבינו מלכנו', cond: 'avinu', p: [q([...AS, 'Post Amidah', 'Avinu Malkenu'])] },
+      { t: 'תחנון', cond: 'tachanun', p: [q([...AS, 'Post Amidah', 'Vidui and 13 Middot']), q([...AS, 'Post Amidah', 'Tachanun', 'For Monday and Thursday'], 'monthu'), q([...AS, 'Post Amidah', 'Tachanun', 'Nefilat Apayim']), q([...AS, 'Post Amidah', 'Tachanun', 'God of Israel'], 'monthu'), q([...AS, 'Post Amidah', 'Tachanun', 'Shomer Yisrael'])] },
+      { t: 'חצי קדיש', p: [q([...AS, 'Post Amidah', 'Tachanun', 'Half Kaddish'])] },
+      { t: 'קריאת התורה', cond: 'torah', p: [q([...AS, 'Torah Reading'])], reading: true },
+      { t: 'אשרי ובא לציון', p: [q([...AS, 'Concluding Prayers', 'Ashrei']), q([...AS, 'Concluding Prayers', "Lamenatze'ach"], '!noLamnatzeach'), q([...AS, 'Concluding Prayers', 'Uva Letzion']), q([...AS, 'Concluding Prayers', 'Kaddish Shalem'])] },
+      { t: 'מוסף לראש חודש', cond: 'rc', p: [q(['Festivals', 'Rosh Chodesh', 'Musaf Amidah for Rosh Chodesh'])] },
+      { t: 'עלינו', p: [q([...AS, 'Concluding Prayers', 'Alenu']), q([...AS, 'Concluding Prayers', "Mourner's Kaddish"])] },
+      { t: 'שיר של יום', p: [q([...AS, 'Concluding Prayers', 'Song of the Day']), q([...AS, 'Concluding Prayers', 'Barchi Nafshi'], 'rc')] },
+      { t: 'לדוד ה׳ אורי', cond: 'elul', p: [q([...AS, 'Concluding Prayers', 'LeDavid'])] },
+    ],
+  },
+  mincha: {
+    title: 'מנחה',
+    parts: [
+      { t: 'אשרי', p: [q([...AM, 'Ashrei'])] },
+      { t: 'קריאת התורה', cond: 'fast', p: [], reading: true },
+      { t: 'עמידה', p: [q([...AM, 'Amida'])], amidah: true },
+      { t: 'אבינו מלכנו', cond: 'avinu', p: [q([...AM, 'Post Amidah', 'Avinu Malkenu'])] },
+      { t: 'תחנון', cond: 'tachanun', p: [q([...AM, 'Post Amidah', 'Vidui and 13 Middot']), q([...AM, 'Post Amidah', 'Tachanun'])] },
+      { t: 'קדיש ועלינו', p: [q([...AM, 'Post Amidah', 'Kaddish Shalem']), q([...AM, 'Concluding Prayers'])] },
+    ],
+  },
+  maariv: {
+    title: 'ערבית',
+    parts: [
+      { t: 'קריאת שמע', p: [q([...AV, 'Vehu Rachum']), q([...AV, 'Barchu']), q([...AV, 'Blessings of the Shema'])] },
+      { t: 'עמידה', p: [q([...AV, 'Amidah'])], amidah: true },
+      { t: 'קדיש', p: [q([...AV, 'Kaddish Shalem'])] },
+      { t: 'מוצאי שבת', cond: 'motzash', p: [q([...AV, "Additions for Motza'ei Shabbat"])] },
+      { t: 'ספירת העומר', cond: 'omer', p: [q([...AV, 'Sefirat HaOmer'])], omer: true },
+      { t: 'עלינו', p: [q([...AV, 'Alenu']), q([...AV, "Mourner's Kaddish"])] },
+      { t: 'לדוד ה׳ אורי', cond: 'elul', p: [q([...AV, 'LeDavid'])] },
+    ],
+  },
+};
+const ES = ['Weekday Shacharit'];
+const P_EDOT = {
+  shacharit: {
+    title: 'שחרית',
+    parts: [
+      { t: 'ברכות השחר', p: [q(['Preparatory Prayers'])] },
+      { t: 'טלית ותפילין', p: [q([...ES, 'Petichat Eliyahu']), q([...ES, 'Order of Talit']), q([...ES, 'Order of Tefillin'], '!tishabav')] },
+      { t: 'קרבנות', p: [q([...ES, "Hanna's Prayer"]), q([...ES, 'Morning Prayer']), q([...ES, 'Incense Offering'])] },
+      { t: 'פסוקי דזמרה', p: [q([...ES, 'Hodu']), q([...ES, "Pesukei D'Zimra"])] },
+      { t: 'קריאת שמע', p: [q([...ES, 'The Shema'])] },
+      { t: 'עמידה', p: [q([...ES, 'Amida'])], amidah: true },
+      { t: 'הלל', cond: 'hallel', p: [q(['Rosh Hodesh', 'Hallel'], null, { to: 33 })], hallel: true },
+      { t: 'סליחות', cond: 'minorFast', fastSelichot: true },
+      { t: 'וידוי ותחנון', p: [q([...ES, 'Vidui'])], ranges: [[1, 10, 'tachanun'], [11, 12, '!monthu'], [13, 32, 'monthu&tachanun'], [33, 33, 'monthu&tachanun']] },
+      { t: 'קריאת התורה', cond: 'torah', p: [q([...ES, 'Torah Reading'])], reading: true },
+      { t: 'אשרי ובא לציון', p: [q([...ES, 'Ashrei'], null, { ranges: [[4, 5, '!noLamnatzeach']] }), q([...ES, 'Uva LeSion'])] },
+      { t: 'מוסף לראש חודש', cond: 'rc', p: [q(['Rosh Hodesh', 'Mussaf'])] },
+      { t: 'שיר של יום', p: [q([...ES, 'Beit Yaakov']), q([...ES, 'Song of the Day'], null, { songDay: true }), q(['Rosh Hodesh', 'Barchi Nafshi'], 'rc')] },
+      { t: 'קוה ועלינו', p: [q([...ES, 'Kaveh']), q([...ES, 'Alenu'])] },
+    ],
+  },
+  mincha: {
+    title: 'מנחה',
+    parts: [
+      { t: 'קרבנות ואשרי', p: [q(['Weekday Mincha', 'Offerings'])] },
+      { t: 'קריאת התורה', cond: 'fast', p: [], reading: true },
+      { t: 'עמידה', p: [q(['Weekday Mincha', 'Amida'])], amidah: true },
+      { t: 'וידוי וקדיש', p: [q(['Weekday Mincha', 'Vidui'])], ranges: [[1, 9, 'tachanun']] },
+      { t: 'עלינו', p: [q(['Weekday Mincha', 'Alenu'])] },
+    ],
+  },
+  maariv: {
+    title: 'ערבית',
+    parts: [
+      { t: 'קריאת שמע', p: [q(['Weekday Arvit', 'Barchu']), q(['Weekday Arvit', 'The Shema'])] },
+      { t: 'עמידה', p: [q(['Weekday Arvit', 'Amidah'])], amidah: true },
+      { t: 'ספירת העומר', cond: 'omer', p: [q(['Counting of the Omer'])], omer: true },
+      { t: 'עלינו', p: [q(['Weekday Arvit', 'Alenu'])] },
+    ],
+  },
+};
+const PROGS = { sefard: P_SEFARD, ashkenaz: P_ASHKENAZ, edot: P_EDOT };
+const P = new Proxy({}, { get: (o, k) => (PROGS[S.nusach] || P_SEFARD)[k] });
+const FAST_SEL = {
+  sefard: { Tevet: ['Fast Days', "Selichot for Asara B'Tevet"], Esther: ['Fast Days', 'Selichot for Taanit Esther'], Tamuz: ['Fast Days', 'Selichot for 17 Tamuz'], Gedaliah: 'polin' },
+  ashkenaz: { Tevet: ['Festivals', 'Selichot', 'Ten of Tevet'], Esther: ['Festivals', 'Selichot', 'Fast of Esther'], Tamuz: ['Festivals', 'Selichot', 'Seventeen of Tamuz'], Gedaliah: ['Festivals', 'Selichot', 'Fast of Gedalia'] },
+  edot: { Tevet: ['Fast Days and Mourning', 'Tenth of Tevet'], Esther: ['Fast Days and Mourning', 'Fast of Esther'], Tamuz: ['Fast Days and Mourning', 'Seventeenth of Tammuz'], Gedaliah: ['Fast Days and Mourning', 'Fast of Gedalya'] },
 };
 
 const ALIYA = ['', 'כהן', 'לוי', 'ישראל', 'רביעי', 'חמישי', 'שישי', 'שביעי', 'מפטיר'];
@@ -203,40 +305,42 @@ function itemsToHtml(items) {
 async function renderPrayer(id) {
   const prog = P[id];
   page(prog.title, '<p class="loading">טוען…</p>', { back: '#home', nav: false, cls: 'reading', right: `<button class="jump" id="jumpBtn">${icon('list', 18)}קפיצה</button>` });
-  const sid = await load('sefard');
+  const sid = await load(S.nusach);
   const ctx = ctxFor(id);
   let html = '';
   const toc = [];
   let n = 0;
   for (const part of prog.parts) {
-    if (part.cond && !(part.cond in ctx ? ctx[part.cond] : false)) continue;
+    if (part.cond && !evalPart(part.cond, ctx)) continue;
     let body = '';
     if (part.fastSelichot) {
-      const key = ctx.descs.find((d) => /Tevet/.test(d)) ? "Selichot for Asara B'Tevet" :
-        ctx.descs.find((d) => /Esther/.test(d)) ? 'Selichot for Taanit Esther' :
-          ctx.descs.find((d) => /Tamuz|Tammuz/.test(d)) ? 'Selichot for 17 Tamuz' : null;
-      if (key) body += itemsToHtml(renderSegments(sid['Fast Days'][key], ctx, S));
-      else if (ctx.descs.find((d) => /Gedaliah/.test(d))) {
+      const fs = FAST_SEL[S.nusach] || FAST_SEL.sefard;
+      const k = ['Tevet', 'Esther', 'Tamuz', 'Gedaliah'].find((x) => ctx.descs.some((d) => d.includes(x === 'Tamuz' ? 'Tam' : x)));
+      const ref = k && fs[k];
+      if (ref === 'polin') {
         const sel = await load('selichot');
-        body += itemsToHtml(renderSegments(sel['Fast of Gedaliah'], ctx, S));
+        body += itemsToHtml(renderSegments(flatten(sel['Fast of Gedaliah']), ctx, S));
+      } else if (ref) {
+        const node = getPath(sid, ref);
+        if (node) body += itemsToHtml(renderSegments(flatten(node), ctx, S));
       }
     }
     for (const pth of part.p || []) {
-      const [a, b, cond] = pth;
-      if (cond && !dayEval(cond, ctx)) continue;
-      const segs = getPath(sid, [a, b]);
-      if (!segs) continue;
-      let ranges = part.ranges || [];
-      if (part.omer) {
-        ranges = [];
-        for (let k = 4; k <= 52; k++) if (k !== 3 + ctx.omer) ranges.push([k, k, 'never']);
-      }
-      body += itemsToHtml(renderSegments(segs, ctx, S, { ranges, from: part.from, to: part.to, amidah: part.amidah }));
+      const spec = Array.isArray(pth) ? { path: [pth[0], pth[1]], cond: pth[2] } : pth;
+      if (spec.cond && !evalPart(spec.cond, ctx)) continue;
+      const node = getPath(sid, spec.path);
+      if (!node) continue;
+      const segs = flatten(node);
+      const ranges = spec.ranges || part.ranges || [];
+      body += itemsToHtml(renderSegments(segs, ctx, S, {
+        ranges, from: spec.from ?? part.from, to: spec.to ?? part.to, amidah: part.amidah,
+        omer: part.omer ? ctx.omer : 0, hallel: part.hallel, songDay: spec.songDay ? ctx.dow : undefined,
+      }));
     }
     if (part.reading) {
       try { body += await readingHtml(getLeyningOnDate(ctx.hd, true)); } catch (e) { /* no reading */ }
     }
-    if (!body.trim()) continue;
+    if (!strip(body).replace(/\s+/g, '').length) continue;
     const anchor = 'sec' + n++;
     const title = typeof part.t === 'function' ? part.t(ctx) : part.t;
     toc.push([anchor, title]);
@@ -247,9 +351,8 @@ async function renderPrayer(id) {
   $('#jumpBtn').onclick = () => openJump(toc);
 }
 
-function dayEval(cond, ctx) {
-  if (cond[0] === '!') return !ctx[cond.slice(1)];
-  return !!ctx[cond];
+function evalPart(cond, ctx) {
+  return cond.split('&').every((c) => (c[0] === '!' ? !ctx[c.slice(1)] : !!ctx[c]));
 }
 
 function dayBanner(ctx) {
@@ -314,7 +417,7 @@ function renderHome() {
 
   // special buttons that appear only when relevant
   const special = [];
-  const eveCtx = dayCtx(civil.next(), { walled: cityInfo(S.city).walled, purim: S.purim });
+  const eveCtx = dayCtx(civil.next(), { walled: cityInfo(S.city).walled, purim: S.purim, nusach: S.nusach });
   if (ctx.selichot) special.push(tile('#selichot', 'heart', 'pink', 'סליחות', 'סליחות להיום'));
   if (eveCtx.chanukah && (evening || now.getHours() >= 12)) special.push(tile('#s-chanukah', 'candles', 'blue', 'הדלקת נרות חנוכה', 'הלילה: נר ' + gematriya(eveCtx.chanukahDay)));
   if (ctx.purim) special.push(tile('#megilla-Esther', 'scroll', 'amber', 'מגילת אסתר', 'עם הברכות'));
@@ -333,19 +436,31 @@ function renderHome() {
 }
 
 /* ---------------- menu & other prayers ---------------- */
-const OTHER = {
-  birkat: ['ברכת המזון', ['Birchat HaMazon', 'Birchat HaMazon']],
-  meein: ['מעין שלוש', ['Blessings', "Me'ein Shalosh"]],
-  nefashot: ['בורא נפשות', ['Blessings', 'Borei Nefashot']],
-  asher: ['ברכות השחר ואשר יצר', ['Weekday Shacharit', 'Morning Blessings']],
-  derech: ['תפילת הדרך', ['Blessings', "Traveler's Prayer"]],
-  bedtime: ['קריאת שמע על המיטה', ['Bedtime Shema']],
-  levana: ['קידוש לבנה', ['Kiddush Levanah']],
-  chanukah: ['הדלקת נרות חנוכה', ['Chanukah', 'Menorah Lighting'], 'evening'],
-  sheva: ['שבע ברכות', ['Various Blessings', 'Sheva Berachot']],
-  brit: ['ברית מילה', ['Various Blessings', 'Circumcision']],
-  omer: ['ספירת העומר', ['Weekday Maariv', 'Sefirat HaOmer'], 'evening'],
+const OTHER_PATHS = {
+  sefard: {
+    birkat: ['Birchat HaMazon', 'Birchat HaMazon'], meein: ['Blessings', "Me'ein Shalosh"], nefashot: ['Blessings', 'Borei Nefashot'],
+    asher: ['Weekday Shacharit', 'Morning Blessings'], derech: ['Blessings', "Traveler's Prayer"], bedtime: ['Bedtime Shema'],
+    levana: ['Kiddush Levanah'], chanukah: ['Chanukah', 'Menorah Lighting'], sheva: ['Various Blessings', 'Sheva Berachot'],
+    brit: ['Various Blessings', 'Circumcision'], omer: ['Weekday Maariv', 'Sefirat HaOmer'],
+  },
+  ashkenaz: {
+    birkat: ['Berachot', 'Birkat HaMazon'], meein: ['Berachot', 'Birkat Hanehenin', 'Eating'], nefashot: ['Berachot', 'Birkat Hanehenin', 'Eating'],
+    asher: ['Weekday', 'Shacharit', 'Preparatory Prayers', 'Asher Yatzar'], derech: ['Berachot', 'Tefillat HaDerech'],
+    bedtime: ['Weekday', 'Maariv', "Keri'at Shema al Hamita"], levana: ['Weekday', 'Maariv', 'Birkat HaLevana'],
+    chanukah: ['Festivals', 'Chanukah'], omer: ['Weekday', 'Maariv', 'Sefirat HaOmer'],
+  },
+  edot: {
+    birkat: ['Post Meal Blessing'], meein: ['Al Hamihya'], nefashot: ['Blessings on Enjoyments'], asher: ['Preparatory Prayers', 'Morning Blessings'],
+    derech: ['Assorted Blessings and Prayers', "Traveler's Prayer"], bedtime: ['Bedtime Shema'], levana: ['Blessing of the Moon'],
+    chanukah: ['Hanukkah', 'Menorah Lighting'], sheva: ['Assorted Blessings and Prayers', 'Sheva Berachot'],
+    brit: ['Assorted Blessings and Prayers', 'Brit Mila'], omer: ['Counting of the Omer'],
+  },
 };
+const OTHER_TITLES = {
+  birkat: 'ברכת המזון', meein: 'מעין שלוש', nefashot: 'בורא נפשות', asher: 'ברכות השחר ואשר יצר', derech: 'תפילת הדרך',
+  bedtime: 'קריאת שמע על המיטה', levana: 'קידוש לבנה', chanukah: 'הדלקת נרות חנוכה', sheva: 'שבע ברכות', brit: 'ברית מילה', omer: 'ספירת העומר',
+};
+const EVENING = new Set(['chanukah', 'omer']);
 
 function renderMenu() {
   page('כל התפילות', `
@@ -366,25 +481,22 @@ function renderMenu() {
 }
 
 async function renderOther(id) {
-  const o = OTHER[id];
-  if (!o) return renderHome();
-  page(o[0], '<p class="loading">טוען…</p>', { back: '#menu', nav: false, cls: 'reading' });
-  const sid = await load('sefard');
+  const title = OTHER_TITLES[id];
+  if (!title) return renderHome();
+  page(title, '<p class="loading">טוען…</p>', { back: '#menu', nav: false, cls: 'reading' });
+  // a prayer the chosen nusach lacks falls back to Nusach Sefard
+  let key = S.nusach, path = (OTHER_PATHS[S.nusach] || {})[id];
+  if (!path) { key = 'sefard'; path = OTHER_PATHS.sefard[id]; }
+  const sid = await load(key);
   const now = NOW();
   const civil = new HDate(now);
   const ci = cityInfo(S.city);
-  const hd = o[2] === 'evening' ? (now.getHours() >= 12 ? civil.next() : civil) : nowHDate(S.city, now).hd;
-  const ctx = dayCtx(hd, { walled: ci.walled, purim: S.purim });
-  const node = getPath(sid, o[1]);
-  let ranges = [];
-  if (id === 'omer') {
-    if (!ctx.omer) { $('main').innerHTML = '<p class="empty">ספירת העומר מתחילה בליל ט״ז בניסן.</p>'; return; }
-    for (let k = 4; k <= 52; k++) if (k !== 3 + ctx.omer) ranges.push([k, k, 'never']);
-  }
-  const segs = Array.isArray(node) ? node : Object.values(node).flat();
-  // stop before the "laws for one who forgot" appendix
-  const stopAt = segs.findIndex((s) => /דיני שכחה/.test(strip(s)));
-  $('main').innerHTML = itemsToHtml(renderSegments(segs, ctx, S, { ranges, to: stopAt > 0 ? stopAt - 1 : undefined }));
+  const hd = EVENING.has(id) ? (now.getHours() >= 12 ? civil.next() : civil) : nowHDate(S.city, now).hd;
+  const ctx = dayCtx(hd, { walled: ci.walled, purim: S.purim, nusach: S.nusach });
+  if (id === 'omer' && !ctx.omer) { $('main').innerHTML = '<p class="empty">ספירת העומר מתחילה בליל ט״ז בניסן.</p>'; return; }
+  const segs = flatten(getPath(sid, path) || []);
+  const stopAt = segs.findIndex((x) => /דיני שכחה/.test(strip(x)));
+  $('main').innerHTML = itemsToHtml(renderSegments(segs, ctx, S, { to: stopAt > 0 ? stopAt - 1 : undefined, omer: id === 'omer' ? ctx.omer : 0 }));
 }
 
 async function renderTzara() {
@@ -415,9 +527,15 @@ async function renderSelichot() {
     'Second Day of the Ten Days of Penitence': 'יום ב׳ של עשי״ת', 'Third Day of the Ten Days of Penitence': 'יום ג׳ של עשי״ת',
     'Fourth Day of the Ten Days of Penitence': 'יום ד׳ של עשי״ת', 'Fifth Day of the Ten Days of Penitence': 'יום ה׳ של עשי״ת', 'Yom Kippur Eve': 'ערב יום כיפור',
   };
+  if (S.nusach === 'edot') {
+    const em = await load('selichot_edot');
+    const intro = ctx.selichot ? '' : '<p class="empty">היום לא אומרים סליחות. לפי מנהג עדות המזרח הסליחות יופיעו לבד במסך הבית מב׳ באלול ועד ערב יום כיפור.</p>';
+    $('main').innerHTML = intro + itemsToHtml(renderSegments(flatten(em), ctx, S));
+    return;
+  }
   const key = ctx.selichot ? selichotKey(ctx.hd) : (location.hash.includes('-') ? decodeURIComponent(location.hash.slice(location.hash.indexOf('-') + 1)).replace(/_/g, ' ') : null);
   if (!key) {
-    $('main').innerHTML = `<p class="empty">היום לא אומרים סליחות. הסליחות יופיעו לבד במסך הבית בימים שאומרים, לפי מנהג נוסח ספרד.</p>
+    $('main').innerHTML = `<p class="empty">היום לא אומרים סליחות. הסליחות יופיעו לבד במסך הבית בימים שאומרים: ממוצאי השבת שלפני ראש השנה ועד ערב יום כיפור.</p>
       <div class="list">${Object.keys(sel).map((k) => `<a href="#selichot-${k.replace(/ /g, '_')}">${HE[k] || k}</a>`).join('')}</div>`;
     return;
   }
@@ -669,7 +787,7 @@ function renderZmanim() {
 function renderSettings() {
   page('הגדרות', `
     <section class="card form">
-      <label>נוסח<select id="nusach"><option value="sefard">ספרד</option><option disabled>אשכנז (בקרוב)</option><option disabled>עדות המזרח (בקרוב)</option></select>
+      <label>נוסח<select id="nusach"><option value="sefard">ספרד</option><option value="ashkenaz">אשכנז</option><option value="edot">עדות המזרח</option></select>
         <small>קובע גם מתי מופיעות סליחות</small></label>
       <label>עיר<select id="city">${CITIES.map((c) => `<option ${c[0] === S.city ? 'selected' : ''}>${c[0]}</option>`).join('')}</select>
         <small>לזמני היום, לתחילת היום העברי ולפורים</small></label>
@@ -694,6 +812,8 @@ function renderSettings() {
     </section>
     <p class="hint">גרסה ראשונה · הטקסטים מספריא (Sefaria), הלוח מ-Hebcal</p>`, { nav: 'set' });
   $('#purim').value = S.purim;
+  $('#nusach').value = S.nusach;
+  $('#nusach').onchange = (e) => { S.nusach = e.target.value; save(); };
   $('#city').onchange = (e) => { S.city = e.target.value; save(); };
   $('#purim').onchange = (e) => { S.purim = e.target.value; save(); };
   $('#names').oninput = (e) => { S.names = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); save(); };
