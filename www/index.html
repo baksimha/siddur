@@ -87,9 +87,12 @@ a{color:inherit;text-decoration:none}
 .reading .onk{color:var(--mute);font-size:calc(var(--fs) * .85)}
 .tk{display:grid;grid-template-columns:1fr 1fr;gap:12px;border-bottom:1px solid var(--line);padding:8px 0;align-items:start}
 .reading .tk .tx{margin:0;text-align:right}
-.reading .taam{font-family:Noto,Frank,serif;line-height:2.1}
+.reading .tx.taam,.reading .taam{font-family:Noto,Frank,serif;line-height:2.1}
 .reading .stam{font-family:StamA,Frank,serif;font-size:calc(var(--fs) * 1.1);line-height:2;font-weight:400}
 .n-edot .reading .stam{font-family:StamS,Frank,serif}
+.tgl{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);margin:0 0 8px}.tgl input{width:22px;height:22px;accent-color:var(--pri)}
+.klist{padding:4px 12px}.krow{display:flex;flex-direction:column;gap:2px;padding:10px 2px;border-bottom:1px solid var(--line)}.krow:last-child{border-bottom:0}
+.krow b{font-size:15px;color:var(--pri2)}.krow span{font-family:Frank,serif;font-size:16px;color:var(--ink)}
 .pnames{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:6px 0}
 .pname{min-height:44px;border-radius:10px;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;text-align:center;font-family:Frank,serif;font-size:16px;padding:4px}
 .pager{display:flex;justify-content:space-between;margin:20px 0;font-weight:700;color:var(--pri2)}

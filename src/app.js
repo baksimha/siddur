@@ -264,9 +264,9 @@ const FAST_SEL = {
 
 const ALIYA = ['', 'כהן', 'לוי', 'ישראל', 'רביעי', 'חמישי', 'שישי', 'שביעי', 'מפטיר'];
 
-function refText(book, b, e) {
+function refText(book, b, e, key) {
   // b, e like "32:4"
-  const t = window.D[bookKey(book)];
+  const t = window.D[key || bookKey(book)];
   const [c1, v1] = b.split(':').map(Number);
   const [c2, v2] = e.split(':').map(Number);
   let h = '';
@@ -304,20 +304,22 @@ async function readingHtml(ley, shabbat = false, mode = 'regular') {
   await Promise.all(books.map((b) => load(bookKey(b))));
   const torahBook = (b) => ['Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy'].includes(b);
   if (mode === 'shnayim') await Promise.all(books.filter(torahBook).map((b) => load('onkelos_' + b)));
-  if (mode === 'tikkun') await Promise.all(books.filter(torahBook).map((b) => load('taamim_' + b)));
+  const useT = (b) => torahBook(b) && (mode === 'tikkun' || S.taamim);
+  await Promise.all(books.filter(useT).map((b) => load('taamim_' + b)));
   let h = `<div class="block-title">הקריאה: ${esc(ley.name && ley.name.he ? ley.name.he : '')}</div>`;
   for (const k of keys) {
     const a = al[k];
     const nm = (shabbat ? SHABBAT_ALIYA : ALIYA)[+k] || (k === 'M' ? 'מפטיר' : k);
     h += `<p class="aliya">${nm}</p>`;
-    if (mode === 'regular' || !torahBook(a.k)) { h += `<p class="tx">${refText(a.k, a.b, a.e)}</p>`; continue; }
-    const plainT = window.D[bookKey(a.k)];
+    if (mode === 'regular' || !torahBook(a.k)) { h += useT(a.k) ? `<p class="tx taam">${refText(a.k, a.b, a.e, 'taamim_' + a.k)}</p>` : `<p class="tx">${refText(a.k, a.b, a.e)}</p>`; continue; }
+    const plainT = window.D[useT(a.k) ? 'taamim_' + a.k : bookKey(a.k)];
     for (const [c, v] of verseList(a.k, a.b, a.e)) {
       const verse = (plainT[c - 1] || [])[v - 1] || '';
       const num = `<sup>${gematriya(c)}:${gematriya(v)}</sup>`;
       if (mode === 'shnayim') {
         const onk = ((window.D['onkelos_' + a.k] || [])[c - 1] || [])[v - 1] || '';
-        h += `<div class="sm"><p class="tx">${num}${verse}</p><p class="tx">${verse}</p><p class="tx onk">${onk}</p></div>`;
+        const tc = S.taamim ? ' taam' : '';
+        h += `<div class="sm"><p class="tx${tc}">${num}${verse}</p><p class="tx${tc}">${verse}</p><p class="tx onk">${onk}</p></div>`;
       } else {
         const ta = ((window.D['taamim_' + a.k] || [])[c - 1] || [])[v - 1] || verse;
         const stam = ta.replace(/\u05BE/g, ' ').replace(/[\u05C0\u05C3]/g, '').replace(ALL_MARKS, '').replace(/\s+/g, ' ');
@@ -507,7 +509,7 @@ function renderMenu() {
       ${tile('#s-birkat', 'plate', 'orange', 'ברכת המזון')}${tile('#s-meein', 'leaf', 'green', 'מעין שלוש')}${tile('#s-nefashot', 'drop', 'sky', 'בורא נפשות')}
       ${tile('#s-asher', 'heart', 'pink', 'אשר יצר')}${tile('#s-derech', 'route', 'teal', 'תפילת הדרך')}${tile('#s-bedtime', 'bed', 'indigo', 'ק״ש על המיטה')}
       ${tile('#s-levana', 'moonfull', 'purple', 'קידוש לבנה')}${tile('#tzara', 'shield', 'red', 'תפילה לעת צרה')}${tile('#tehillim', 'book', 'green', 'תהילים')}
-      ${tile('#torah', 'scroll', 'blue', 'קריאת התורה')}${tile('#tanakh', 'book', 'indigo', 'תנ״ך')}${tile('#haftara', 'scroll', 'amber', 'הפטרת השבוע')}${tile('#megillot', 'scroll', 'orange', 'מגילות')}${tile('#chatzot', 'moon', 'indigo', 'תיקון חצות')}
+      ${tile('#torah', 'scroll', 'blue', 'קריאת התורה')}${tile('#tanakh', 'book', 'indigo', 'תנ״ך')}${tile('#kitzur', 'book', 'purple', 'קיצור שולחן ערוך')}${tile('#haftara', 'scroll', 'amber', 'הפטרת השבוע')}${tile('#megillot', 'scroll', 'orange', 'מגילות')}${tile('#chatzot', 'moon', 'indigo', 'תיקון חצות')}
       ${tile('#selichot', 'heart', 'red', 'סליחות')}${tile('#s-sheva', 'star', 'pink', 'שבע ברכות')}${tile('#s-brit', 'star', 'blue', 'ברית מילה')}
       ${tile('#s-omer', 'star', 'green', 'ספירת העומר')}${tile('#s-chanukah', 'candles', 'blue', 'נרות חנוכה')}${tile('#zmanim', 'clock', 'sky', 'זמני היום')}
     </div>`, { nav: 'menu' });
@@ -684,8 +686,10 @@ function renderTorahMenu() {
   const ley = getLeyningOnDate(shab, true);
   const cur = ley && ley.parsha ? ley.parsha.join('-') : null;
   const today = getLeyningOnDate(new HDate(NOW()), true);
-  const todayTile = today && (today.weekday || today.fullkriyah) && new HDate(NOW()).getDay() !== 6
-    ? tile('#torah-today', 'scroll', 'orange', 'הקריאה של היום', esc(today.name && today.name.he ? today.name.he : '')) : '';
+  // the weekday reading is part of the weekly parasha (and appears in Shacharit), so show it only when it is a different reading (Rosh Chodesh, fast, festival)
+  const todayName = today && today.name && today.name.he;
+  const todayTile = today && (today.weekday || today.fullkriyah) && new HDate(NOW()).getDay() !== 6 && todayName && !(ley && ley.name && ley.name.he === todayName)
+    ? tile('#torah-today', 'scroll', 'orange', 'הקריאה של היום', esc(todayName)) : '';
   const list = parshiot.map((p) => {
     let he = p;
     try { he = getLeyningForParsha(p).name.he; } catch (e) { /* keep */ }
@@ -705,7 +709,8 @@ async function renderParasha(name) {
   const mode = S.torahMode || 'regular';
   const modes = [['regular', 'רגיל'], ['shnayim', 'שניים מקרא ואחד תרגום'], ['tikkun', 'טעמים מול ספר תורה']];
   let h = `<div class="banner">${esc(ley.name && ley.name.he ? (shabbat ? 'פרשת ' : '') + ley.name.he : '')}</div>
-    <div class="seg" role="group" aria-label="תצוגה">${modes.map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+    <div class="seg" role="group" aria-label="תצוגה">${modes.map(([k, l]) => `<button data-mode="${k}" class="${k === mode ? 'on' : ''}">${l}</button>`).join('')}</div>
+    ${mode !== 'tikkun' ? `<label class="tgl"><input type="checkbox" id="taamT" ${S.taamim ? 'checked' : ''}> להציג טעמי המקרא</label>` : ''}`;
   if (mode === 'tikkun') h += '<p class="hint">מימין: עם ניקוד וטעמים. משמאל: בכתב סת״ם, כמו בספר התורה.</p>';
   h += await readingHtml(name === 'today' ? ley : { ...ley, weekday: null }, shabbat, mode);
   const haft = shabbat ? (S.nusach === 'edot' && ley.seph ? ley.seph : ley.haft) : null;
@@ -716,6 +721,7 @@ async function renderParasha(name) {
   }
   $('main').innerHTML = h;
   document.querySelectorAll('.seg button').forEach((bt) => { bt.onclick = () => { S.torahMode = bt.dataset.mode; save(); renderParasha(name); }; });
+  const tt = $('#taamT'); if (tt) tt.onchange = () => { S.taamim = tt.checked; save(); renderParasha(name); };
 }
 
 function renderTanakh() {
@@ -736,6 +742,37 @@ async function renderTanakhChapter(arg) {
   const ch = t[c - 1] || [];
   const pager = `<div class="pager">${c > 1 ? `<a href="#tc-${slug(book)}.${c - 1}">→ פרק ${gematriya(c - 1)}</a>` : '<span></span>'}${c < t.length ? `<a href="#tc-${slug(book)}.${c + 1}">פרק ${gematriya(c + 1)} ←</a>` : ''}</div>`;
   $('main').innerHTML = `<p class="tx">${refText(book, c + ':1', c + ':' + ch.length)}</p>` + pager;
+  window.scrollTo(0, 0);
+}
+
+
+/* ---------------- Kitzur Shulchan Arukh ---------------- */
+async function renderKitzurIndex() {
+  page('קיצור שולחן ערוך', '<p class="loading">טוען…</p>', { back: '#menu', nav: 'menu' });
+  const t = await load('kitzur');
+  const bare = (x) => strip(x).replace(/[֑-ׇ]/g, '');
+  const rows = t.map((sim, i) => {
+    const first = bare(sim[0] || '').split(/\s+/).slice(0, 7).join(' ');
+    return `<a class="krow" href="#ks-${i + 1}" data-i="${i}"><b>סימן ${gematriya(i + 1)}</b><span>${esc(first)}…</span></a>`;
+  }).join('');
+  const today = learningLine('kitzurshulchanaruch', new HDate(NOW())).replace(/^.*?\s(?=[א-ת])/, '');
+  $('main').innerHTML = `${tile('#l-kitzurshulchanaruch', 'book', 'purple', 'הלימוד של היום', esc(today))}
+    <label class="search">${icon('search', 20)}<input id="kq" type="search" placeholder="חיפוש בכל הספר: ציצית, ברכות…" aria-label="חיפוש"></label>
+    <section class="card klist" id="kl">${rows}</section>`;
+  const plain = t.map((sim) => bare(sim.join(' ')));
+  $('#kq').oninput = (e) => {
+    const q = e.target.value.trim().replace(/[֑-ׇ]/g, '');
+    document.querySelectorAll('#kl .krow').forEach((r) => { r.style.display = !q || plain[+r.dataset.i].includes(q) ? '' : 'none'; });
+  };
+}
+
+async function renderKitzurSiman(n) {
+  const t = await load('kitzur');
+  const i = Math.min(t.length, Math.max(1, +n || 1));
+  page('קיצור שו״ע · סימן ' + gematriya(i), '', { back: '#kitzur', nav: false, cls: 'reading' });
+  const sim = t[i - 1] || [];
+  const pager = `<div class="pager">${i > 1 ? `<a href="#ks-${i - 1}">→ סימן ${gematriya(i - 1)}</a>` : '<span></span>'}${i < t.length ? `<a href="#ks-${i + 1}">סימן ${gematriya(i + 1)} ←</a>` : ''}</div>`;
+  $('main').innerHTML = sim.map((x, k) => `<p class="tx"><sup>${gematriya(k + 1)}</sup>${x}</p>`).join('') + pager;
   window.scrollTo(0, 0);
 }
 
@@ -915,6 +952,7 @@ function renderSettings() {
     <section class="card form">
       <label class="sw"><span>מצנזר שמות ה׳</span><input type="checkbox" id="censor" ${S.censor ? 'checked' : ''}></label>
       <label class="sw"><span>מצב לילה</span><input type="checkbox" id="night" ${S.night ? 'checked' : ''}></label>
+      <label class="sw"><span>טעמי המקרא בקריאת התורה</span><input type="checkbox" id="taamim" ${S.taamim ? 'checked' : ''}></label>
       <label class="sw"><span>הצג הוראות והלכות קטנות</span><input type="checkbox" id="notes" ${S.notes ? 'checked' : ''}></label>
       <label>גודל כתב <input type="range" id="font" min="16" max="36" step="1" value="${S.font}"></label>
       <p id="sample" style="margin:0">בָּרוּךְ אַתָּה יְהֹוָה אֱלֹהֵינוּ מֶלֶךְ הָעוֹלָם</p>
@@ -930,7 +968,7 @@ function renderSettings() {
   $('#city').onchange = (e) => { S.city = e.target.value; save(); };
   $('#purim').onchange = (e) => { S.purim = e.target.value; save(); };
   $('#names').oninput = (e) => { S.names = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); save(); };
-  ['censor', 'night', 'notes'].forEach((k) => { $('#' + k).onchange = (e) => { S[k] = e.target.checked; save(); }; });
+  ['censor', 'night', 'notes', 'taamim'].forEach((k) => { $('#' + k).onchange = (e) => { S[k] = e.target.checked; save(); }; });
   $('#font').oninput = (e) => { S.font = +e.target.value; save(); };
   document.querySelectorAll('[data-learn]').forEach((el) => {
     el.onchange = () => { S.learning = [...document.querySelectorAll('[data-learn]:checked')].map((x) => x.dataset.learn); save(); };
@@ -961,6 +999,8 @@ function route() {
     if (a === 'torah') return b === 'today' ? renderParasha('today') : renderTorahMenu();
     if (a === 'parasha') return renderParasha(b);
     if (a === 'tanakh') return renderTanakh();
+    if (a === 'kitzur') return renderKitzurIndex();
+    if (a === 'ks') return renderKitzurSiman(b);
     if (a === 'tn') return renderTanakhBook(b);
     if (a === 'tc') return renderTanakhChapter(b);
     if (a === 'zmanim') return renderZmanim();
