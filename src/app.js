@@ -3,6 +3,7 @@ import { parshiot } from '@hebcal/core';
 import { HDate, months, DailyLearning, getLeyningOnDate, CITIES, cityInfo, zmanim, nowHDate, dayCtx, selichotKey } from './cal.js';
 import { gematriya } from '@hebcal/core';
 import { renderSegments, strip, flatten } from './siddur.js';
+import { startTranslating } from './i18n.js';
 
 /* ---------------- clock (a ?date=YYYY-MM-DDTHH:MM param lets you preview another day) ---------------- */
 const TEST = (location.search.match(/[?&]date=([^&]+)/) || [])[1];
@@ -11,7 +12,7 @@ const NOW = () => (TEST ? new Date(decodeURIComponent(TEST)) : new Date());
 /* ---------------- storage ---------------- */
 const DEFAULTS = {
   city: 'ירושלים', purim: 'auto', names: [], censor: false, night: false, font: 22,
-  notes: false, learning: ['dirshudafhalacha', 'psalms'], nusach: 'sefard',
+  notes: false, learning: ['dirshudafhalacha', 'psalms'], nusach: 'sefard', lang: 'he', trans: false,
 };
 let S = { ...DEFAULTS };
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem('siddur.settings') || '{}') }; } catch (e) { /* ignore */ }
@@ -19,6 +20,8 @@ function save() { try { localStorage.setItem('siddur.settings', JSON.stringify(S
 function applyTheme() {
   document.documentElement.classList.toggle('night', !!S.night);
   document.documentElement.classList.toggle('n-edot', S.nusach === 'edot');
+  document.documentElement.setAttribute('dir', S.lang === 'en' ? 'ltr' : 'rtl');
+  document.documentElement.setAttribute('lang', S.lang === 'en' ? 'en' : 'he');
   document.documentElement.style.setProperty('--fs', S.font + 'px');
 }
 
@@ -39,6 +42,7 @@ function load(key) {
   return loading[key];
 }
 const bookKey = (b) => 'tanakh_' + b.replace(/ /g, '_');
+const loadBook = (b) => Promise.all([load(bookKey(b)), S.trans ? load('en_' + bookKey(b)).catch(() => null) : null]).then((r) => r[0]);
 
 /* ---------------- helpers ---------------- */
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -110,7 +114,9 @@ function ctxFor(prayer, now = NOW()) {
   return dayCtx(hd, { prayer, walled: ci.walled, purim: S.purim, motzash, nusach: S.nusach });
 }
 
-function hebDate(hd) { return hd.renderGematriya(true).replace(/\s*תש/, ' תש'); }
+function hebDate(hd) { return S.lang === 'en' ? hd.render('en') : hd.renderGematriya(true).replace(/\s*תש/, ' תש'); }
+const showEn = () => !!S.trans;
+const enText = (x) => (x ? `<p class="en" dir="ltr">${x}</p>` : '');
 
 /* ---------------- prayer programs (Nusach Sefard) ---------------- */
 const P_SEFARD = {
@@ -274,7 +280,13 @@ function refText(book, b, e, key) {
     const ch = t[c - 1] || [];
     const from = c === c1 ? v1 : 1;
     const to = c === c2 ? v2 : ch.length;
-    for (let v = from; v <= to; v++) if (ch[v - 1]) h += `<sup>${gematriya(v)}</sup>${ch[v - 1]} `;
+    const en = showEn() ? window.D['en_' + bookKey(book)] : null;
+    for (let v = from; v <= to; v++) {
+      if (!ch[v - 1]) continue;
+      h += `<sup>${gematriya(v)}</sup>${ch[v - 1]} `;
+      const e = en && en[c - 1] && en[c - 1][v - 1];
+      if (e) h += `</p><p class="en" dir="ltr"><sup>${v}</sup> ${e}</p><p class="tx${key && key.startsWith('taamim') ? ' taam' : ''}">`;
+    }
   }
   return h;
 }
@@ -301,7 +313,7 @@ async function readingHtml(ley, shabbat = false, mode = 'regular') {
   if (!al) return '';
   const keys = Object.keys(al).filter((k) => al[k] && al[k].k);
   const books = [...new Set(keys.map((k) => al[k].k))];
-  await Promise.all(books.map((b) => load(bookKey(b))));
+  await Promise.all(books.map((b) => loadBook((b))));
   const torahBook = (b) => ['Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy'].includes(b);
   if (mode === 'shnayim') await Promise.all(books.filter(torahBook).map((b) => load('onkelos_' + b)));
   const useT = (b) => torahBook(b) && (mode === 'tikkun' || S.taamim);
@@ -337,7 +349,7 @@ function itemsToHtml(items) {
     if (it.k === 'heading') return `<h3 class="sh">${esc(it.html)}</h3>`;
     if (it.k === 'label') return `<p class="lbl">${esc(it.html)}</p>`;
     if (it.k === 'note') return `<p class="note">${esc(it.html)}</p>`;
-    return `<p class="tx${it.red ? ' ins' : ''}">${it.html}</p>`;
+    return `<p class="tx${it.red ? ' ins' : ''}">${it.html}</p>` + (showEn() ? enText(it.en) : '');
   }).join('');
 }
 
@@ -345,6 +357,7 @@ async function renderPrayer(id) {
   const prog = P[id];
   page(prog.title, '<p class="loading">טוען…</p>', { back: '#home', nav: false, cls: 'reading', right: `<button class="jump" id="jumpBtn">${icon('list', 18)}קפיצה</button>` });
   const sid = await load(S.nusach);
+  const enSid = showEn() ? await load('en_' + S.nusach).catch(() => null) : null;
   const ctx = ctxFor(id);
   let html = '';
   const toc = [];
@@ -370,8 +383,10 @@ async function renderPrayer(id) {
       const node = getPath(sid, spec.path);
       if (!node) continue;
       const segs = flatten(node);
+      const enSegs = enSid ? flatten(getPath(enSid, spec.path) || []) : null;
       const ranges = spec.ranges || part.ranges || [];
       body += itemsToHtml(renderSegments(segs, ctx, S, {
+        en: enSegs && enSegs.length === segs.length ? enSegs : null,
         ranges, from: spec.from ?? part.from, to: spec.to ?? part.to, amidah: part.amidah,
         omer: part.omer ? ctx.omer : 0, hallel: part.hallel, songDay: spec.songDay ? ctx.dow : undefined,
       }));
@@ -429,7 +444,7 @@ function currentPrayer(z, now) {
 function learningLine(key, hd) {
   try {
     const ev = DailyLearning.lookup(key, hd, true);
-    return ev ? ev.render('he') : '';
+    return ev ? ev.render(S.lang === 'en' ? 'en' : 'he') : '';
   } catch (e) { return ''; }
 }
 
@@ -534,13 +549,15 @@ async function renderOther(id) {
   const ctx = dayCtx(hd, { walled: ci.walled, purim: S.purim, nusach: S.nusach });
   if (id === 'omer' && !ctx.omer) { $('main').innerHTML = '<p class="empty">ספירת העומר מתחילה בליל ט״ז בניסן.</p>'; return; }
   const segs = flatten(getPath(sid, path) || []);
+  const enSid = showEn() ? await load('en_' + key).catch(() => null) : null;
+  const enSegs = enSid ? flatten(getPath(enSid, path) || []) : null;
   const stopAt = segs.findIndex((x) => /דיני שכחה/.test(strip(x)));
-  $('main').innerHTML = itemsToHtml(renderSegments(segs, ctx, S, { to: stopAt > 0 ? stopAt - 1 : undefined, omer: id === 'omer' ? ctx.omer : 0 }));
+  $('main').innerHTML = itemsToHtml(renderSegments(segs, ctx, S, { to: stopAt > 0 ? stopAt - 1 : undefined, omer: id === 'omer' ? ctx.omer : 0, en: enSegs && enSegs.length === segs.length ? enSegs : null }));
 }
 
 async function renderTzara() {
   page('תפילה לעת צרה', '<p class="loading">טוען…</p>', { back: '#menu', nav: false, cls: 'reading' });
-  const [ps, sid] = await Promise.all([load(bookKey('Psalms')), load('sefard')]);
+  const [ps, sid] = await Promise.all([loadBook(('Psalms')), load('sefard')]);
   let h = '';
   for (const c of [20, 83, 121, 130, 142]) h += `<h3 class="sh">תהילים ${gematriya(c)}</h3><p class="tx">${refText('Psalms', c + ':1', c + ':' + ps[c - 1].length)}</p>`;
   const ach = sid['Weekday Shacharit']['Torah Reading'].find((s) => /אַחֵֽינוּ כָּל בֵּית יִשְׂרָאֵל/.test(s));
@@ -597,7 +614,7 @@ function renderTehillimMenu() {
 }
 
 async function renderTehillim(arg) {
-  const ps = await load(bookKey('Psalms'));
+  const ps = await loadBook(('Psalms'));
   let ranges = [];
   let title = 'תהילים';
   if (arg === 'day') {
@@ -630,13 +647,13 @@ async function renderTehillim(arg) {
 
 async function renderBook(book) {
   page(HEB_BOOK[book] || book, '<p class="loading">טוען…</p>', { back: '#megillot', nav: false, cls: 'reading' });
-  const t = await load(bookKey(book));
+  const t = await loadBook((book));
   $('main').innerHTML = t.map((ch, i) => `<h3 class="sh">פרק ${gematriya(i + 1)}</h3><p class="tx">${refText(book, (i + 1) + ':1', (i + 1) + ':' + ch.length)}</p>`).join('');
 }
 
 async function renderMegilla() {
   page('מגילת אסתר', '<p class="loading">טוען…</p>', { back: '#home', nav: false, cls: 'reading' });
-  const [sid, t] = await Promise.all([load('sefard'), load(bookKey('Esther'))]);
+  const [sid, t] = await Promise.all([load('sefard'), loadBook(('Esther'))]);
   const ctx = ctxFor(null);
   const blessings = sid.Purim['Megillah Reading'];
   const before = itemsToHtml(renderSegments(blessings, ctx, S, { to: 5 }));
@@ -659,7 +676,7 @@ async function renderHaftara() {
   const ley = getLeyningOnDate(d, true);
   if (!ley || !ley.haft) { $('main').innerHTML = '<p class="empty">לא נמצאה הפטרה לשבת הקרובה.</p>'; return; }
   const parts = Array.isArray(ley.haft) ? ley.haft : [ley.haft];
-  await Promise.all(parts.map((p) => load(bookKey(p.k))));
+  await Promise.all(parts.map((p) => loadBook((p.k))));
   const name = ley.name && ley.name.he ? ley.name.he : '';
   $('main').innerHTML = `<div class="banner">שבת ${hebDate(d)} · ${esc(name)}</div>` +
     parts.map((p) => `<h3 class="sh">${HEB_BOOK[p.k] || p.k}</h3><p class="tx">${refText(p.k, p.b, p.e)}</p>`).join('');
@@ -672,7 +689,7 @@ const TANAKH = [
   ['נביאים', ['Joshua', 'Judges', 'I Samuel', 'II Samuel', 'I Kings', 'II Kings', 'Isaiah', 'Jeremiah', 'Ezekiel', 'Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi']],
   ['כתובים', ['Psalms', 'Proverbs', 'Job', 'Song of Songs', 'Ruth', 'Lamentations', 'Ecclesiastes', 'Esther', 'Daniel', 'Ezra', 'Nehemiah', 'I Chronicles', 'II Chronicles']],
 ];
-const bookName = (b) => (HEB_BOOK[b] || b).replace(/^מגילת /, '');
+const bookName = (b) => (S.lang === 'en' ? b : (HEB_BOOK[b] || b).replace(/^מגילת /, ''));
 const slug = (x) => x.replace(/ /g, '_');
 
 function nextShabbat() {
@@ -692,7 +709,7 @@ function renderTorahMenu() {
     ? tile('#torah-today', 'scroll', 'orange', 'הקריאה של היום', esc(todayName)) : '';
   const list = parshiot.map((p) => {
     let he = p;
-    try { he = getLeyningForParsha(p).name.he; } catch (e) { /* keep */ }
+    try { he = getLeyningForParsha(p).name[S.lang === 'en' ? 'en' : 'he']; } catch (e) { /* keep */ }
     return `<a class="pname" href="#parasha-${slug(p)}">${esc(he)}</a>`;
   }).join('');
   page('קריאת התורה', `<div class="grid2">
@@ -716,7 +733,7 @@ async function renderParasha(name) {
   const haft = shabbat ? (S.nusach === 'edot' && ley.seph ? ley.seph : ley.haft) : null;
   if (haft) {
     const parts = Array.isArray(haft) ? haft : [haft];
-    await Promise.all(parts.map((p) => load(bookKey(p.k))));
+    await Promise.all(parts.map((p) => loadBook((p.k))));
     h += '<h2 class="ph">הפטרה</h2>' + parts.map((p) => `<h3 class="sh">${HEB_BOOK[p.k] || p.k}</h3><p class="tx">${refText(p.k, p.b, p.e)}</p>`).join('');
   }
   $('main').innerHTML = h;
@@ -730,15 +747,15 @@ function renderTanakh() {
 
 async function renderTanakhBook(book) {
   page(bookName(book), '<p class="loading">טוען…</p>', { back: '#tanakh', nav: false });
-  const t = await load(bookKey(book));
+  const t = await loadBook((book));
   $('main').innerHTML = `<section class="card"><h2>בחר פרק</h2><div class="nums">${t.map((_, i) => `<a class="num" href="#tc-${slug(book)}.${i + 1}">${gematriya(i + 1)}</a>`).join('')}</div></section>`;
 }
 
 async function renderTanakhChapter(arg) {
   const k = arg.lastIndexOf('.');
   const book = arg.slice(0, k), c = +arg.slice(k + 1) || 1;
-  page(bookName(book) + ' ' + gematriya(c), '<p class="loading">טוען…</p>', { back: '#tn-' + slug(book), nav: false, cls: 'reading' });
-  const t = await load(bookKey(book));
+  page(bookName(book) + ' ' + (S.lang === 'en' ? c : gematriya(c)), '<p class="loading">טוען…</p>', { back: '#tn-' + slug(book), nav: false, cls: 'reading' });
+  const t = await loadBook((book));
   const ch = t[c - 1] || [];
   const pager = `<div class="pager">${c > 1 ? `<a href="#tc-${slug(book)}.${c - 1}">→ פרק ${gematriya(c - 1)}</a>` : '<span></span>'}${c < t.length ? `<a href="#tc-${slug(book)}.${c + 1}">פרק ${gematriya(c + 1)} ←</a>` : ''}</div>`;
   $('main').innerHTML = `<p class="tx">${refText(book, c + ':1', c + ':' + ch.length)}</p>` + pager;
@@ -771,8 +788,9 @@ async function renderKitzurSiman(n) {
   const i = Math.min(t.length, Math.max(1, +n || 1));
   page('קיצור שו״ע · סימן ' + gematriya(i), '', { back: '#kitzur', nav: false, cls: 'reading' });
   const sim = t[i - 1] || [];
+  const ek = showEn() ? await load('en_kitzur').catch(() => null) : null;
   const pager = `<div class="pager">${i > 1 ? `<a href="#ks-${i - 1}">→ סימן ${gematriya(i - 1)}</a>` : '<span></span>'}${i < t.length ? `<a href="#ks-${i + 1}">סימן ${gematriya(i + 1)} ←</a>` : ''}</div>`;
-  $('main').innerHTML = sim.map((x, k) => `<p class="tx"><sup>${gematriya(k + 1)}</sup>${x}</p>`).join('') + pager;
+  $('main').innerHTML = sim.map((x, k) => `<p class="tx"><sup>${gematriya(k + 1)}</sup>${x}</p>` + (ek ? enText(((ek[i - 1] || [])[k]) || '') : '')).join('') + pager;
   window.scrollTo(0, 0);
 }
 
@@ -892,7 +910,7 @@ async function renderLearnItem(k) {
       const ch = Array.isArray(sec[0]) ? sec[ev.reading.chap - 1] : sec;
       h += `<h3 class="sh">פרק ${gematriya(ev.reading.chap)}</h3>${segs(ch)}`;
     } else if (k === 'nachyomi') {
-      await load(bookKey(ev.k));
+      await loadBook((ev.k));
       const t = window.D[bookKey(ev.k)];
       h += `<h3 class="sh">${HEB_BOOK[ev.k] || ev.k} ${gematriya(ev.v)}</h3><p class="tx">${refText(ev.k, ev.v + ':1', ev.v + ':' + t[ev.v - 1].length)}</p>`;
     } else throw new Error('missing');
@@ -937,6 +955,7 @@ function renderZmanim() {
 function renderSettings() {
   page('הגדרות', `
     <section class="card form">
+      <label>שפה<select id="lang"><option value="he">עברית</option><option value="en">English</option></select></label>
       <label>נוסח<select id="nusach"><option value="sefard">ספרד</option><option value="ashkenaz">אשכנז</option><option value="edot">עדות המזרח</option></select>
         <small>קובע גם מתי מופיעות סליחות</small></label>
       <label>עיר<select id="city">${CITIES.map((c) => `<option ${c[0] === S.city ? 'selected' : ''}>${c[0]}</option>`).join('')}</select>
@@ -952,6 +971,7 @@ function renderSettings() {
     <section class="card form">
       <label class="sw"><span>מצנזר שמות ה׳</span><input type="checkbox" id="censor" ${S.censor ? 'checked' : ''}></label>
       <label class="sw"><span>מצב לילה</span><input type="checkbox" id="night" ${S.night ? 'checked' : ''}></label>
+      <label class="sw"><span>תרגום לאנגלית מתחת לטקסט</span><input type="checkbox" id="trans" ${S.trans ? 'checked' : ''}></label>
       <label class="sw"><span>טעמי המקרא בקריאת התורה</span><input type="checkbox" id="taamim" ${S.taamim ? 'checked' : ''}></label>
       <label class="sw"><span>הצג הוראות והלכות קטנות</span><input type="checkbox" id="notes" ${S.notes ? 'checked' : ''}></label>
       <label>גודל כתב <input type="range" id="font" min="16" max="36" step="1" value="${S.font}"></label>
@@ -961,14 +981,18 @@ function renderSettings() {
       <h2>לימוד יומי</h2>
       ${LEARN.map(([k, n]) => `<label class="sw"><span>${n}</span><input type="checkbox" data-learn="${k}" ${S.learning.includes(k) ? 'checked' : ''}></label>`).join('')}
     </section>
-    <p class="hint">גרסה ראשונה · הטקסטים מספריא (Sefaria), הלוח מ-Hebcal</p>`, { nav: 'set' });
+    <p class="hint">גרסה ראשונה · הטקסטים מספריא (Sefaria), הלוח מ-Hebcal</p>
+    <p class="hint" dir="ltr">English: Metsudah Siddur by Avrohom Davis (CC-BY), The Standard Prayer Book by Simeon Singer (1915), JPS 1917 Tanakh, Metsudah Kitzur Shulchan Aruch (CC-BY) and the Sefaria Community Translation (CC0).</p>`, { nav: 'set' });
   $('#purim').value = S.purim;
   $('#nusach').value = S.nusach;
+  $('#lang').value = S.lang;
+  $('#lang').onchange = (e) => { S.lang = e.target.value; if (S.lang === 'en' && S.trans === false && !S._transSet) S.trans = true; save(); route(); };
+  $('#trans').addEventListener('change', () => { S._transSet = true; save(); });
   $('#nusach').onchange = (e) => { S.nusach = e.target.value; save(); };
   $('#city').onchange = (e) => { S.city = e.target.value; save(); };
   $('#purim').onchange = (e) => { S.purim = e.target.value; save(); };
   $('#names').oninput = (e) => { S.names = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean); save(); };
-  ['censor', 'night', 'notes', 'taamim'].forEach((k) => { $('#' + k).onchange = (e) => { S[k] = e.target.checked; save(); }; });
+  ['censor', 'night', 'notes', 'taamim', 'trans'].forEach((k) => { $('#' + k).onchange = (e) => { S[k] = e.target.checked; save(); }; });
   $('#font').oninput = (e) => { S.font = +e.target.value; save(); };
   document.querySelectorAll('[data-learn]').forEach((el) => {
     el.onchange = () => { S.learning = [...document.querySelectorAll('[data-learn]:checked')].map((x) => x.dataset.learn); save(); };
@@ -1014,4 +1038,5 @@ function route() {
 window.addEventListener('hashchange', route);
 window.addEventListener('unhandledrejection', (e) => { const m = $('main'); if (m) m.innerHTML = `<p class="empty">שגיאה בטעינה: ${esc(e.reason && e.reason.message)}</p>`; });
 applyTheme();
+startTranslating(() => S.lang === 'en');
 route();

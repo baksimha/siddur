@@ -4,6 +4,21 @@ import { condFromLabel, evalCond, RED, SINGLE } from './cal.js';
 const NIK = /[ְ-ׇּׁׂ]/;
 export const strip = (s) => s.replace(/<[^>]+>/g, '');
 
+// an instruction that only concerns a special day is hidden on other days, even when instructions are shown
+function noteCond(text) {
+  const t = text.replace(/[\u0591-\u05C7]/g, '').replace(/[״“”]/g, '"');
+  if (/על הנ[י]?סים|בחנוכה|בפורים/.test(t)) return 'chanukah|purim';
+  if (/עשי"ת|עשרת ימי תשובה|זכרנו|מי כמוך|המלך הקדוש|המלך המשפט|וכתוב|בספר חיים|הקדוש ברוך הוא בעשרת/.test(t)) return 'ayt';
+  if (/יעלה ויבא|יעלה ויבוא|ראש חו?דש|ר"ח|חול המועד|חוה"מ/.test(t)) return 'rc|cholhamoed';
+  if (/עננו|תענית/.test(t)) return 'fast';
+  if (/תשעה באב|ט' באב|נחם/.test(t)) return 'tishabav';
+  if (/משיב הרוח|מוריד הגשם/.test(t)) return 'winter';
+  if (/טל ומטר|ותן טל/.test(t)) return 'talumatar';
+  if (/מוצאי שבת|אתה חוננתנו/.test(t)) return 'motzash';
+  if (/ספירת העומר|לספור העומר/.test(t)) return 'omer';
+  return null;
+}
+
 export function classify(seg) {
   const s = (seg || '').trim();
   const plain = strip(s).replace(/\s+/g, ' ').trim();
@@ -16,7 +31,7 @@ export function classify(seg) {
       return { t: 'label', text: plain, cond };
     }
     if (/^\s*(<(b|big)>)+/.test(s) && plain.length < 45) return { t: 'heading', text: plain };
-    return { t: 'note', text: plain, cond };
+    return { t: 'note', text: plain, cond: cond || noteCond(plain) };
   }
   // several inline variants in one segment: "<small>בקיץ:</small> ... <small>בחורף:</small> ..."
   const marks = s.match(/<small>\s*[^<]{1,25}:\s*<\/small>/g) || [];
@@ -39,7 +54,7 @@ export function classify(seg) {
   // a small paragraph that opens with plain (unvocalized) words is an instruction, unless it is a known variant
   if (smallWrapped && !NIK.test(plain.slice(0, 22))) {
     const lm = plain.match(/^\s*\(?([^:\u05B0-\u05BC]{2,40}):/);
-    if (!(lm && condFromLabel(lm[1]))) return { t: 'note', text: plain, cond: null };
+    if (!(lm && condFromLabel(lm[1]))) return { t: 'note', text: plain, cond: noteCond(plain) };
   }
   // paragraphs that belong to a special day even when the siddur gives them no label
   const pn = plain.replace(/[\u0591-\u05C7]/g, '').replace(/^[\s(]+/, '');
@@ -159,7 +174,7 @@ export function renderSegments(segs, ctx, settings, opts = {}) {
       src = res;
     }
     let html = transformHtml(src, ctx, settings);
-    out.push({ k: 'text', html, red, small: false, idx: i });
+    out.push({ k: 'text', html, red, small: false, idx: i, en: opts.en ? opts.en[i] : '' });
   };
   let i = from;
   while (i <= to) {
@@ -205,9 +220,9 @@ export function renderSegments(segs, ctx, settings, opts = {}) {
       i = j;
       continue;
     }
-    if (c.t === 'label') { out.push({ k: 'label', html: c.text }); i++; continue; }
+    if (c.t === 'label') { const nc = noteCond(c.text); if (!nc || evalCond(nc, ctx)) out.push({ k: 'label', html: c.text }); i++; continue; }
     if (c.t === 'heading') { out.push({ k: 'heading', html: c.text }); i++; continue; }
-    if (c.t === 'note') { if (settings.notes) out.push({ k: 'note', html: c.text }); i++; continue; }
+    if (c.t === 'note') { if (settings.notes && (!c.cond || evalCond(c.cond, ctx))) out.push({ k: 'note', html: c.text }); i++; continue; }
     // text
     if (c.cond) {
       if (evalCond(c.cond, ctx)) emitText(i, c, RED.has(c.cond));
